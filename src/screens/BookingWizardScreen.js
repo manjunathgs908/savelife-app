@@ -1,0 +1,245 @@
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import { COLORS, getBookingConfig } from "../theme";
+
+const DIST = 8.4; // km - replace with Google Maps distance later
+
+export default function BookingWizardScreen({ navigation, route }) {
+  const service = route.params?.service || "bls";
+  const cfg = getBookingConfig(service);
+  const svcName = { bls: "BLS", als: "ALS", icu: "ICU" }[service] || "Ambulance";
+
+  const steps = cfg.isAdvanced
+    ? ["location", "vehicle", "ac", "staff", "addons", "review"]
+    : ["location", "vehicle", "ac", "addons", "review"];
+
+  const [step, setStep] = useState(1);
+  const [vehicle, setVehicle] = useState(null);
+  const [ac, setAc] = useState(null);
+  const [staff, setStaff] = useState(null);
+  const [addons, setAddons] = useState([]);
+
+  const cur = steps[step - 1];
+
+  // Fare
+  const perKm = vehicle ? cfg.vehicles.find((v) => v.id === vehicle)?.rate || 0 : 0;
+  const distFare = Math.round(perKm * DIST);
+  const acFare = ac === "ac" ? cfg.acPrice : 0;
+  const staffFare = staff ? cfg.staffPrice[staff] : 0;
+  const addonFare = addons.reduce((s, id) => s + (cfg.addons.find((a) => a.id === id)?.price || 0), 0);
+  const total = distFare + acFare + staffFare + addonFare;
+
+  const toggleAddon = (id) => setAddons((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]));
+
+  const next = () => (step < steps.length ? setStep(step + 1) : navigation.navigate("Searching", { service }));
+  const back = () => (step > 1 ? setStep(step - 1) : navigation.goBack());
+
+  const canNext =
+    cur === "location" ? true :
+    cur === "vehicle" ? vehicle :
+    cur === "ac" ? ac :
+    cur === "staff" ? staff : true;
+
+  const OptCard = ({ active, onPress, icon, name, desc, radio = true, check = false }) => (
+    <TouchableOpacity
+      style={[styles.opt, { borderColor: active ? COLORS.red : COLORS.border, backgroundColor: active ? "rgba(232,25,44,0.08)" : COLORS.bg3 }]}
+      onPress={onPress}
+    >
+      {icon ? <View style={styles.optIcon}><Text style={{ fontSize: 24 }}>{icon}</Text></View> : null}
+      <View style={{ flex: 1 }}>
+        <Text style={styles.optName}>{name}</Text>
+        {desc ? <Text style={styles.optDesc}>{desc}</Text> : null}
+      </View>
+      {radio && (
+        <View style={[styles.radio, { borderColor: active ? COLORS.red : "rgba(255,255,255,0.3)" }]}>
+          {active && <View style={styles.radioDot} />}
+        </View>
+      )}
+      {check && (
+        <View style={[styles.checkbox, { backgroundColor: active ? COLORS.red : "transparent", borderColor: active ? COLORS.red : "rgba(255,255,255,0.3)" }]}>
+          {active && <Text style={{ color: "#fff", fontSize: 13 }}>✓</Text>}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.back} onPress={back}>
+          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.title}>{svcName} Ambulance</Text>
+          <Text style={styles.stepLbl}>Step {step} of {steps.length}</Text>
+        </View>
+      </View>
+
+      {/* dots */}
+      <View style={styles.dots}>
+        {steps.map((_, i) => (
+          <View key={i} style={[styles.dot, { backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)", width: i === step - 1 ? 26 : 8 }]} />
+        ))}
+      </View>
+
+      {/* fare bar */}
+      {step > 1 && (
+        <View style={styles.fareBar}>
+          <View>
+            <Text style={styles.fareLbl}>Estimated Fare • {DIST} km</Text>
+            <Text style={styles.fareAmt}>₹{total.toLocaleString()}</Text>
+          </View>
+          <View style={styles.fareTag}><Text style={styles.fareTagText}>LIVE</Text></View>
+        </View>
+      )}
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 18 }}>
+        {cur === "location" && (
+          <>
+            <Text style={styles.q}>Pickup & Drop</Text>
+            <Text style={styles.qHint}>Fare is calculated based on distance</Text>
+            <View style={styles.locField}>
+              <Text style={{ color: COLORS.green }}>●</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locLbl}>Pickup Location</Text>
+                <Text style={styles.locVal}>📍 Indiranagar, Bangalore</Text>
+              </View>
+            </View>
+            <View style={styles.connector} />
+            <View style={styles.locField}>
+              <Text style={{ color: COLORS.red }}>●</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locLbl}>Drop Location</Text>
+                <Text style={styles.locVal}>🏥 Manipal Hospital</Text>
+              </View>
+            </View>
+            <View style={styles.mapBox}>
+              <Text style={styles.mapText}>📏 {DIST} km • ~22 min</Text>
+            </View>
+          </>
+        )}
+
+        {cur === "vehicle" && (
+          <>
+            <Text style={styles.q}>Choose Vehicle</Text>
+            {cfg.vehicles.map((v) => (
+              <OptCard key={v.id} active={vehicle === v.id} onPress={() => setVehicle(v.id)}
+                icon={v.icon} name={v.name} desc={`₹${v.rate}/km • ₹${Math.round(v.rate * DIST)} this trip`} />
+            ))}
+          </>
+        )}
+
+        {cur === "ac" && (
+          <>
+            <Text style={styles.q}>AC Preference</Text>
+            <OptCard active={ac === "ac"} onPress={() => setAc("ac")} icon="❄️" name="With AC" desc="+₹200" />
+            <OptCard active={ac === "nonac"} onPress={() => setAc("nonac")} icon="🌡️" name="Without AC" desc="Free" />
+          </>
+        )}
+
+        {cur === "staff" && (
+          <>
+            <Text style={styles.q}>Medical Staff</Text>
+            <OptCard active={staff === "nurse"} onPress={() => setStaff("nurse")} icon="👩‍⚕️" name="Nurse" desc="+₹500" />
+            <OptCard active={staff === "doctor"} onPress={() => setStaff("doctor")} icon="🩺" name="Doctor" desc="+₹1,200" />
+          </>
+        )}
+
+        {cur === "addons" && (
+          <>
+            <Text style={styles.q}>Add Equipment</Text>
+            <Text style={styles.qHint}>Select what you need, or skip if none</Text>
+            {cfg.addons.map((a) => (
+              <OptCard key={a.id} active={addons.includes(a.id)} onPress={() => toggleAddon(a.id)}
+                name={a.name} desc={`₹${a.price}`} radio={false} check />
+            ))}
+          </>
+        )}
+
+        {cur === "review" && (
+          <>
+            <Text style={styles.q}>Review & Confirm</Text>
+            <View style={styles.reviewCard}>
+              <Row l="Service" v={`${svcName} Ambulance`} />
+              <Row l="Vehicle" v={cfg.vehicles.find((v) => v.id === vehicle)?.name || "—"} />
+              <Row l="AC" v={ac === "ac" ? "With AC" : "Without AC"} />
+              {cfg.isAdvanced && <Row l="Staff" v={staff === "doctor" ? "Doctor" : staff === "nurse" ? "Nurse" : "—"} />}
+              <Row l="Equipment" v={addons.length ? `${addons.length} items` : "None"} />
+              <Row l="Distance" v={`${DIST} km`} />
+            </View>
+            <View style={styles.breakdown}>
+              <FbRow l={`Distance (${DIST} km × ₹${perKm})`} v={`₹${distFare}`} />
+              {acFare > 0 && <FbRow l="AC charge" v={`₹${acFare}`} />}
+              {staffFare > 0 && <FbRow l="Medical staff" v={`₹${staffFare}`} />}
+              {addonFare > 0 && <FbRow l="Equipment" v={`₹${addonFare}`} />}
+              <View style={styles.fbTotal}>
+                <Text style={styles.fbTotalText}>Total</Text>
+                <Text style={[styles.fbTotalText, { color: COLORS.red }]}>₹{total.toLocaleString()}</Text>
+              </View>
+            </View>
+          </>
+        )}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        {cur === "addons" && (
+          <TouchableOpacity style={styles.skip} onPress={next}><Text style={styles.skipText}>Skip</Text></TouchableOpacity>
+        )}
+        <TouchableOpacity style={[styles.btn, { opacity: canNext ? 1 : 0.4, flex: 1 }]} disabled={!canNext} onPress={next}>
+          <Text style={styles.btnText}>{step === steps.length ? `Confirm • ₹${total.toLocaleString()}` : "Next"}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const Row = ({ l, v }) => (
+  <View style={styles.revRow}><Text style={styles.revLbl}>{l}</Text><Text style={styles.revVal}>{v}</Text></View>
+);
+const FbRow = ({ l, v }) => (
+  <View style={styles.fbRow}><Text style={styles.fbText}>{l}</Text><Text style={styles.fbText}>{v}</Text></View>
+);
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
+  back: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
+  dots: { flexDirection: "row", gap: 6, paddingHorizontal: 18, paddingVertical: 14, alignItems: "center" },
+  dot: { height: 8, borderRadius: 4 },
+  fareBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 18, marginBottom: 8, padding: 14, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 1, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14 },
+  fareLbl: { color: COLORS.gray, fontSize: 11 },
+  fareAmt: { color: COLORS.white, fontSize: 24, fontWeight: "800", marginTop: 2 },
+  fareTag: { backgroundColor: "rgba(232,25,44,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
+  fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+  q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
+  qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
+  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, borderRadius: 14, borderWidth: 1, marginBottom: 11 },
+  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center" },
+  optName: { color: COLORS.white, fontWeight: "600", fontSize: 15 },
+  optDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  locField: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
+  locLbl: { color: COLORS.grayDim, fontSize: 11 },
+  locVal: { color: COLORS.white, fontSize: 14, marginTop: 3, fontWeight: "500" },
+  connector: { width: 2, height: 18, backgroundColor: "rgba(255,255,255,0.15)", marginLeft: 26 },
+  mapBox: { height: 150, backgroundColor: COLORS.bg3, borderRadius: 14, marginTop: 16, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border },
+  mapText: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
+  reviewCard: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, marginBottom: 14 },
+  revRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
+  revLbl: { color: COLORS.grayDim, fontSize: 13 },
+  revVal: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+  breakdown: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18 },
+  fbRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 7 },
+  fbText: { color: COLORS.gray, fontSize: 13 },
+  fbTotal: { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, marginTop: 6, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" },
+  fbTotalText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
+  footer: { padding: 18, flexDirection: "row", gap: 10 },
+  skip: { paddingHorizontal: 28, paddingVertical: 16, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
+  skipText: { color: COLORS.gray, fontSize: 15, fontWeight: "600" },
+  btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
+  btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
+});
