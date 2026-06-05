@@ -37,6 +37,9 @@
         "projectId": "f5c9122a-b815-47f8-99a9-474dda4e9337"
       }
     },
-    "owner": "medifleetapp"
+    "owner": "medifleetapp",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
