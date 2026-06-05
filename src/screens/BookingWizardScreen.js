@@ -1,8 +1,28 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View, Text, TouchableOpacity, ScrollView,
+  StyleSheet, ActivityIndicator,
+} from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Location from "expo-location";
 import { COLORS, getBookingConfig } from "../theme";
 
-const DIST = 8.4; // km - replace with Google Maps distance later
+const MAPS_KEY = "AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY";
+
+function decodePolyline(encoded) {
+  const pts = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return pts;
+}
 
 export default function BookingWizardScreen({ navigation, route }) {
   const service = route.params?.service || "bls";
@@ -19,26 +39,87 @@ export default function BookingWizardScreen({ navigation, route }) {
   const [staff, setStaff] = useState(null);
   const [addons, setAddons] = useState([]);
 
-  const cur = steps[step - 1];
+  const [pickup, setPickup] = useState(null);
+  const [dropoff, setDropoff] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [realDist, setRealDist] = useState(null);
+  const [realDuration, setRealDuration] = useState(null);
+  const [locLoading, setLocLoading] = useState(true);
+  const mapRef = useRef(null);
 
-  // Fare
+  const cur = steps[step - 1];
+  const dist = realDist ?? 8.4;
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocLoading(false);
+        return;
+      }
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setPickup({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      } catch {
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) {
+          setPickup({ latitude: last.coords.latitude, longitude: last.coords.longitude });
+        }
+      }
+      setLocLoading(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!pickup || !dropoff) return;
+    fetchRoute(pickup, dropoff);
+  }, [dropoff]);
+
+  async function fetchRoute(from, to) {
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/directions/json` +
+        `?origin=${from.latitude},${from.longitude}` +
+        `&destination=${to.latitude},${to.longitude}` +
+        `&key=${MAPS_KEY}`
+      );
+      const data = await res.json();
+      if (data.routes?.length) {
+        const leg = data.routes[0].legs[0];
+        setRealDist(leg.distance.value / 1000);
+        setRealDuration(leg.duration.value);
+        setRouteCoords(decodePolyline(data.routes[0].overview_polyline.points));
+        setTimeout(() => {
+          mapRef.current?.fitToCoordinates([from, to], {
+            edgePadding: { top: 60, right: 50, bottom: 60, left: 50 },
+            animated: true,
+          });
+        }, 400);
+      }
+    } catch (_) {}
+  }
+
   const perKm = vehicle ? cfg.vehicles.find((v) => v.id === vehicle)?.rate || 0 : 0;
-  const distFare = Math.round(perKm * DIST);
+  const distFare = Math.round(perKm * dist);
   const acFare = ac === "ac" ? cfg.acPrice : 0;
   const staffFare = staff ? cfg.staffPrice[staff] : 0;
   const addonFare = addons.reduce((s, id) => s + (cfg.addons.find((a) => a.id === id)?.price || 0), 0);
   const total = distFare + acFare + staffFare + addonFare;
 
-  const toggleAddon = (id) => setAddons((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]));
+  const toggleAddon = (id) =>
+    setAddons((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]));
 
-  const next = () => (step < steps.length ? setStep(step + 1) : navigation.navigate("Searching", { service }));
+  const next = () =>
+    step < steps.length ? setStep(step + 1) : navigation.navigate("Searching", { service });
   const back = () => (step > 1 ? setStep(step - 1) : navigation.goBack());
 
   const canNext =
-    cur === "location" ? true :
-    cur === "vehicle" ? vehicle :
-    cur === "ac" ? ac :
-    cur === "staff" ? staff : true;
+    cur === "location" ? !!dropoff :
+    cur === "vehicle" ? !!vehicle :
+    cur === "ac" ? !!ac :
+    cur === "staff" ? !!staff : true;
 
   const OptCard = ({ active, onPress, icon, name, desc, radio = true, check = false }) => (
     <TouchableOpacity
@@ -75,18 +156,16 @@ export default function BookingWizardScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* dots */}
       <View style={styles.dots}>
         {steps.map((_, i) => (
           <View key={i} style={[styles.dot, { backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)", width: i === step - 1 ? 26 : 8 }]} />
         ))}
       </View>
 
-      {/* fare bar */}
       {step > 1 && (
         <View style={styles.fareBar}>
           <View>
-            <Text style={styles.fareLbl}>Estimated Fare • {DIST} km</Text>
+            <Text style={styles.fareLbl}>Estimated Fare • {dist.toFixed(1)} km</Text>
             <Text style={styles.fareAmt}>₹{total.toLocaleString()}</Text>
           </View>
           <View style={styles.fareTag}><Text style={styles.fareTagText}>LIVE</Text></View>
@@ -94,28 +173,86 @@ export default function BookingWizardScreen({ navigation, route }) {
       )}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 18 }}>
+
         {cur === "location" && (
           <>
             <Text style={styles.q}>Pickup & Drop</Text>
-            <Text style={styles.qHint}>Fare is calculated based on distance</Text>
+            <Text style={styles.qHint}>Tap on the map to set your drop location</Text>
+
+            {locLoading ? (
+              <View style={styles.mapPlaceholder}>
+                <ActivityIndicator color={COLORS.red} size="large" />
+                <Text style={styles.mapPlaceholderText}>Getting your location…</Text>
+              </View>
+            ) : !pickup ? (
+              <View style={styles.mapPlaceholder}>
+                <Text style={{ fontSize: 32 }}>📍</Text>
+                <Text style={styles.mapPlaceholderText}>Location unavailable</Text>
+                <Text style={styles.mapPlaceholderSub}>Enable location permission and try again</Text>
+              </View>
+            ) : (
+              <View style={styles.mapContainer}>
+                <MapView
+                  ref={mapRef}
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: pickup.latitude,
+                    longitude: pickup.longitude,
+                    latitudeDelta: 0.04,
+                    longitudeDelta: 0.04,
+                  }}
+                  onPress={(e) => setDropoff(e.nativeEvent.coordinate)}
+                >
+                  <Marker coordinate={pickup} pinColor="green" title="Pickup" />
+                  {dropoff && <Marker coordinate={dropoff} pinColor="red" title="Drop" />}
+                  {routeCoords.length > 0 && (
+                    <Polyline
+                      coordinates={routeCoords}
+                      strokeColor={COLORS.red}
+                      strokeWidth={3}
+                    />
+                  )}
+                </MapView>
+                {!dropoff && (
+                  <View style={styles.mapHint} pointerEvents="none">
+                    <View style={styles.mapHintBubble}>
+                      <Text style={styles.mapHintText}>👆 Tap to set drop location</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
             <View style={styles.locField}>
-              <Text style={{ color: COLORS.green }}>●</Text>
+              <Text style={{ color: COLORS.green, fontSize: 16 }}>●</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.locLbl}>Pickup Location</Text>
-                <Text style={styles.locVal}>📍 Indiranagar, Bangalore</Text>
+                <Text style={styles.locVal}>
+                  {locLoading ? "Getting location…" : pickup ? "📍 Current Location" : "Location unavailable"}
+                </Text>
               </View>
             </View>
             <View style={styles.connector} />
             <View style={styles.locField}>
-              <Text style={{ color: COLORS.red }}>●</Text>
+              <Text style={{ color: COLORS.red, fontSize: 16 }}>●</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.locLbl}>Drop Location</Text>
-                <Text style={styles.locVal}>🏥 Manipal Hospital</Text>
+                <Text style={styles.locVal}>
+                  {dropoff
+                    ? `📍 ${dropoff.latitude.toFixed(4)}°, ${dropoff.longitude.toFixed(4)}°`
+                    : "Tap on map to select"}
+                </Text>
               </View>
             </View>
-            <View style={styles.mapBox}>
-              <Text style={styles.mapText}>📏 {DIST} km • ~22 min</Text>
-            </View>
+
+            {realDist != null && (
+              <View style={styles.distRow}>
+                <Text style={styles.distText}>
+                  📏 {realDist.toFixed(1)} km • ~{Math.round(realDuration / 60)} min
+                </Text>
+              </View>
+            )}
           </>
         )}
 
@@ -124,7 +261,7 @@ export default function BookingWizardScreen({ navigation, route }) {
             <Text style={styles.q}>Choose Vehicle</Text>
             {cfg.vehicles.map((v) => (
               <OptCard key={v.id} active={vehicle === v.id} onPress={() => setVehicle(v.id)}
-                icon={v.icon} name={v.name} desc={`₹${v.rate}/km • ₹${Math.round(v.rate * DIST)} this trip`} />
+                icon={v.icon} name={v.name} desc={`₹${v.rate}/km • ₹${Math.round(v.rate * dist)} this trip`} />
             ))}
           </>
         )}
@@ -165,10 +302,10 @@ export default function BookingWizardScreen({ navigation, route }) {
               <Row l="AC" v={ac === "ac" ? "With AC" : "Without AC"} />
               {cfg.isAdvanced && <Row l="Staff" v={staff === "doctor" ? "Doctor" : staff === "nurse" ? "Nurse" : "—"} />}
               <Row l="Equipment" v={addons.length ? `${addons.length} items` : "None"} />
-              <Row l="Distance" v={`${DIST} km`} />
+              <Row l="Distance" v={`${dist.toFixed(1)} km`} />
             </View>
             <View style={styles.breakdown}>
-              <FbRow l={`Distance (${DIST} km × ₹${perKm})`} v={`₹${distFare}`} />
+              <FbRow l={`Distance (${dist.toFixed(1)} km × ₹${perKm})`} v={`₹${distFare}`} />
               {acFare > 0 && <FbRow l="AC charge" v={`₹${acFare}`} />}
               {staffFare > 0 && <FbRow l="Medical staff" v={`₹${staffFare}`} />}
               {addonFare > 0 && <FbRow l="Equipment" v={`₹${addonFare}`} />}
@@ -179,14 +316,23 @@ export default function BookingWizardScreen({ navigation, route }) {
             </View>
           </>
         )}
+
       </ScrollView>
 
       <View style={styles.footer}>
         {cur === "addons" && (
-          <TouchableOpacity style={styles.skip} onPress={next}><Text style={styles.skipText}>Skip</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.skip} onPress={next}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
         )}
-        <TouchableOpacity style={[styles.btn, { opacity: canNext ? 1 : 0.4, flex: 1 }]} disabled={!canNext} onPress={next}>
-          <Text style={styles.btnText}>{step === steps.length ? `Confirm • ₹${total.toLocaleString()}` : "Next"}</Text>
+        <TouchableOpacity
+          style={[styles.btn, { opacity: canNext ? 1 : 0.4, flex: 1 }]}
+          disabled={!canNext}
+          onPress={next}
+        >
+          <Text style={styles.btnText}>
+            {step === steps.length ? `Confirm • ₹${total.toLocaleString()}` : "Next"}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -194,10 +340,17 @@ export default function BookingWizardScreen({ navigation, route }) {
 }
 
 const Row = ({ l, v }) => (
-  <View style={styles.revRow}><Text style={styles.revLbl}>{l}</Text><Text style={styles.revVal}>{v}</Text></View>
+  <View style={styles.revRow}>
+    <Text style={styles.revLbl}>{l}</Text>
+    <Text style={styles.revVal}>{v}</Text>
+  </View>
 );
+
 const FbRow = ({ l, v }) => (
-  <View style={styles.fbRow}><Text style={styles.fbText}>{l}</Text><Text style={styles.fbText}>{v}</Text></View>
+  <View style={styles.fbRow}>
+    <Text style={styles.fbText}>{l}</Text>
+    <Text style={styles.fbText}>{v}</Text>
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -215,6 +368,20 @@ const styles = StyleSheet.create({
   fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
   q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
+  mapContainer: { height: 240, borderRadius: 14, overflow: "hidden", marginBottom: 16 },
+  map: { flex: 1 },
+  mapPlaceholder: { height: 240, backgroundColor: COLORS.bg3, borderRadius: 14, marginBottom: 16, alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1, borderColor: COLORS.border },
+  mapPlaceholderText: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  mapPlaceholderSub: { color: COLORS.grayDim, fontSize: 12 },
+  mapHint: { position: "absolute", bottom: 12, left: 0, right: 0, alignItems: "center" },
+  mapHintBubble: { backgroundColor: "rgba(0,0,0,0.65)", paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
+  mapHintText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  locField: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
+  locLbl: { color: COLORS.grayDim, fontSize: 11 },
+  locVal: { color: COLORS.white, fontSize: 14, marginTop: 3, fontWeight: "500" },
+  connector: { width: 2, height: 18, backgroundColor: "rgba(255,255,255,0.15)", marginLeft: 26 },
+  distRow: { marginTop: 12, padding: 12, backgroundColor: "rgba(34,197,94,0.1)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(34,197,94,0.25)" },
+  distText: { color: COLORS.green, fontWeight: "600", fontSize: 13, textAlign: "center" },
   opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, borderRadius: 14, borderWidth: 1, marginBottom: 11 },
   optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center" },
   optName: { color: COLORS.white, fontWeight: "600", fontSize: 15 },
@@ -222,12 +389,6 @@ const styles = StyleSheet.create({
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
   checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  locField: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
-  locLbl: { color: COLORS.grayDim, fontSize: 11 },
-  locVal: { color: COLORS.white, fontSize: 14, marginTop: 3, fontWeight: "500" },
-  connector: { width: 2, height: 18, backgroundColor: "rgba(255,255,255,0.15)", marginLeft: 26 },
-  mapBox: { height: 150, backgroundColor: COLORS.bg3, borderRadius: 14, marginTop: 16, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border },
-  mapText: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
   reviewCard: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, marginBottom: 14 },
   revRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
   revLbl: { color: COLORS.grayDim, fontSize: 13 },

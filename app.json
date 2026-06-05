@@ -27,7 +27,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,7 +44,19 @@
     },
     "owner": "medifleetapp",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SaveLife needs your location to show your pickup point on the map."
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "enableGoogleMaps": true
+        }
+      ]
     ]
   }
 }
