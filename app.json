@@ -51,12 +51,6 @@
           "locationWhenInUsePermission": "SaveLife needs your location to show your pickup point on the map."
         }
       ],
-      [
-        "react-native-maps",
-        {
-          "enableGoogleMaps": true
-        }
-      ]
     ]
   }
 }
