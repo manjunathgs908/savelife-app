@@ -1,4 +1,4 @@
-// SaveLife App Theme
+﻿// SaveLife App Theme
 export const COLORS = {
   red: "#e8192c",
   redDark: "#a01020",
@@ -7,32 +7,25 @@ export const COLORS = {
   bg3: "#0d1018",
   white: "#ffffff",
   gray: "rgba(255,255,255,0.5)",
-  grayDim: "rgba(255,255,255,0.4)",
+  grayDim: "rgba(255,255,255,0.35)",
   border: "rgba(255,255,255,0.08)",
   green: "#22c55e",
 };
-
 export const LANGUAGES = ["EN", "KN", "HI", "TE", "TA", "ML"];
-
-// Translation helper
 export const t = (lang, en, kn, hi, te, ta, ml) =>
   lang === "KN" ? kn : lang === "HI" ? hi : lang === "TE" ? te : lang === "TA" ? ta : lang === "ML" ? ml : en;
-
-// Ambulance types
 export const AMB_TYPES = [
   { id: "bls", icon: "🚑", name: "BLS", desc: "Basic Life Support" },
-  { id: "als", icon: "❤️", name: "ALS", desc: "Advanced Life Support" },
+  { id: "als", icon: "🏥", name: "ALS", desc: "Advanced Life Support" },
   { id: "icu", icon: "🏥", name: "ICU", desc: "Mobile Intensive Care" },
   { id: "neo", icon: "👶", name: "Neonatal", desc: "Newborn Transport" },
   { id: "card", icon: "💗", name: "Cardiac", desc: "Heart Emergency" },
-  { id: "mort", icon: "🕊️", name: "Mortuary", desc: "Deceased Transport" },
+  { id: "mort", icon: "🕊", name: "Mortuary", desc: "Deceased Transport" },
 ];
-
-// Services for home grid
 export const SERVICES = [
   { icon: "📅", label: "Schedule", screen: "Schedule" },
   { icon: "✈️", label: "Air", screen: "Booking" },
-  { icon: "🎪", label: "Event", screen: "Booking" },
+  { icon: "🎪", label: "Event", screen: "EventAmbulance" },
   { icon: "🛡️", label: "Standby", screen: "Booking" },
   { icon: "🏠", label: "Home Care", screen: "Booking" },
   { icon: "❄️", label: "Freezer Box", screen: "Booking" },
@@ -40,20 +33,18 @@ export const SERVICES = [
   { icon: "🕉️", label: "Antim Yatra", screen: "Booking" },
   { icon: "🚆", label: "Train", screen: "Booking" },
 ];
-
-// Vehicle & addon config per service
 export const getBookingConfig = (service) => {
   const isAdvanced = service === "als" || service === "icu";
   return {
     isAdvanced,
     vehicles: isAdvanced
       ? [
-          { id: "winger", icon: "🚐", name: "Winger Ambulance", rate: 22 },
-          { id: "tempo", icon: "🚌", name: "Tempo Traveller", rate: 28 },
+          { id: "winger", icon: "ðŸš", name: "Winger Ambulance", rate: 22 },
+          { id: "tempo", icon: "ðŸšŒ", name: "Tempo Traveller", rate: 28 },
         ]
       : [
-          { id: "eeco", icon: "🚐", name: "Eeco Ambulance", rate: 15 },
-          { id: "tempo", icon: "🚌", name: "Tempo Traveller", rate: 20 },
+          { id: "eeco", icon: "ðŸš", name: "Eeco Ambulance", rate: 15 },
+          { id: "tempo", icon: "ðŸšŒ", name: "Tempo Traveller", rate: 20 },
         ],
     addons: isAdvanced
       ? [
@@ -76,3 +67,5 @@ export const getBookingConfig = (service) => {
     acPrice: 200,
   };
 };
+
+

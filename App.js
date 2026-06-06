@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -13,6 +13,7 @@ import SelectTypeScreen from "./src/screens/SelectTypeScreen";
 import BookingWizardScreen from "./src/screens/BookingWizardScreen";
 import SearchingScreen from "./src/screens/SearchingScreen";
 import TrackingScreen from "./src/screens/TrackingScreen";
+import EventAmbulanceScreen from "./src/screens/EventAmbulanceScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -43,9 +44,11 @@ export default function App() {
             <Stack.Screen name="Booking" component={BookingWizardScreen} />
             <Stack.Screen name="Searching" component={SearchingScreen} />
             <Stack.Screen name="Tracking" component={TrackingScreen} />
+            <Stack.Screen name="EventAmbulance" component={EventAmbulanceScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AppContext.Provider>
     </SafeAreaProvider>
   );
 }
+
