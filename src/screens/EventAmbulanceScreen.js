@@ -88,9 +88,10 @@ function LocationSearchModal({ visible, onSelect, onClose, gpsCoord, gpsLabel })
 
 const PURPOSES = ["Sports Event","Concert / Show","Corporate Event","Wedding / Function","Marathon / Run","School / College Event","Religious Event","Other"];
 const AMBULANCE_TYPES = [
-  { id: "bls", name: "BLS Ambulance", tag: "Basic Life Support", recommended: true },
-  { id: "als", name: "ALS Ambulance", tag: "Advanced Life Support", recommended: false },
-  { id: "icu", name: "ICU Ambulance", tag: "Critical Care Unit", recommended: false },
+  { id: "BLS_VAN", name: "BLS Ambulance", tag: "Eeco - Basic Life Support", recommended: true },
+  { id: "BLS_TEMPO", name: "BLS Ambulance", tag: "Tempo Traveller - Basic Life Support", recommended: false },
+  { id: "ALS", name: "ALS Ambulance", tag: "Tempo Traveller - Advanced Life Support", recommended: false },
+  { id: "ACLS", name: "ACLS Ambulance", tag: "Tempo Traveller - Advanced Cardiac Life Support", recommended: false },
 ];
 const EQUIPMENTS = [
   { id: "oxygen", name: "Oxygen" },
