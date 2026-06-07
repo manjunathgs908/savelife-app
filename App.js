@@ -16,6 +16,8 @@ import TrackingScreen from "./src/screens/TrackingScreen";
 import EventAmbulanceScreen from "./src/screens/EventAmbulanceScreen";
 import FreezerBoxScreen from "./src/screens/FreezerBoxScreen";
 import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
+import TrainAmbulanceScreen from "./src/screens/TrainAmbulanceScreen";
+import AirAmbulanceScreen from "./src/screens/AirAmbulanceScreen.jsx";
 
 const Stack = createNativeStackNavigator();
 
@@ -49,6 +51,8 @@ export default function App() {
             <Stack.Screen name="EventAmbulance" component={EventAmbulanceScreen} />
             <Stack.Screen name="FreezerBox" component={FreezerBoxScreen} />
             <Stack.Screen name="FreezerBoxBooking" component={FreezerBoxBookingScreen} />
+            <Stack.Screen name="Train" component={TrainAmbulanceScreen} />
+            <Stack.Screen name="AirAmbulance" component={AirAmbulanceScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AppContext.Provider>

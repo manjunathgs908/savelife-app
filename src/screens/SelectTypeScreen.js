@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
   desc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+  arrow: { color: COLORS.grayDim, fontSize: 22, fontWeight: "300" },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
 });
