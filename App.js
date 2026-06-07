@@ -14,6 +14,8 @@ import BookingWizardScreen from "./src/screens/BookingWizardScreen";
 import SearchingScreen from "./src/screens/SearchingScreen";
 import TrackingScreen from "./src/screens/TrackingScreen";
 import EventAmbulanceScreen from "./src/screens/EventAmbulanceScreen";
+import FreezerBoxScreen from "./src/screens/FreezerBoxScreen";
+import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -45,6 +47,8 @@ export default function App() {
             <Stack.Screen name="Searching" component={SearchingScreen} />
             <Stack.Screen name="Tracking" component={TrackingScreen} />
             <Stack.Screen name="EventAmbulance" component={EventAmbulanceScreen} />
+            <Stack.Screen name="FreezerBox" component={FreezerBoxScreen} />
+            <Stack.Screen name="FreezerBoxBooking" component={FreezerBoxBookingScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AppContext.Provider>

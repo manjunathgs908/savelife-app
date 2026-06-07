@@ -28,7 +28,7 @@ export const SERVICES = [
   { icon: "🎪", label: "Event", screen: "EventAmbulance" },
   { icon: "🛡️", label: "Standby", screen: "Booking" },
   { icon: "🏠", label: "Home Care", screen: "Booking" },
-  { icon: "❄️", label: "Freezer Box", screen: "Booking" },
+  { icon: "❄️", label: "Freezer Box", screen: "FreezerBox" },
   { icon: "⚰️", label: "Remains", screen: "Booking" },
   { icon: "🕉️", label: "Antim Yatra", screen: "Booking" },
   { icon: "🚆", label: "Train", screen: "Booking" },
