@@ -19,6 +19,10 @@ import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
 import TrainAmbulanceScreen from "./src/screens/TrainAmbulanceScreen";
 import AirAmbulanceScreen from "./src/screens/AirAmbulanceScreen.jsx";
 import RemainsScreen from "./src/screens/RemainsScreen";
+import AntimYatraScreen from "./src/screens/AntimYatraScreen";
+import HomeCareScreen from "./src/screens/HomeCareScreen";
+import StandbyScreen from "./src/screens/StandbyScreen";
+import ScheduleScreen from "./src/screens/ScheduleScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -55,6 +59,10 @@ export default function App() {
             <Stack.Screen name="Train" component={TrainAmbulanceScreen} />
             <Stack.Screen name="AirAmbulance" component={AirAmbulanceScreen} />
             <Stack.Screen name="Remains" component={RemainsScreen} />
+            <Stack.Screen name="AntimYatra" component={AntimYatraScreen} />
+            <Stack.Screen name="HomeCare" component={HomeCareScreen} />
+            <Stack.Screen name="Standby" component={StandbyScreen} />
+            <Stack.Screen name="Schedule" component={ScheduleScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AppContext.Provider>
