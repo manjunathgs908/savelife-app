@@ -8,6 +8,7 @@ import * as Location from "expo-location";
 import { COLORS, getBookingConfig } from "../theme";
 
 const MAPS_KEY = "AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY";
+const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
 function decodePolyline(encoded) {
   const pts = [];
@@ -27,7 +28,7 @@ function decodePolyline(encoded) {
 async function reverseGeocode(lat, lng) {
   try {
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${MAPS_KEY}`
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`
     );
     const data = await res.json();
     if (data.results?.length) return data.results[0].formatted_address;
@@ -56,7 +57,7 @@ function LocationSearchModal({ visible, title, onSelect, onClose, gpsCoord, gpsL
       try {
         const res = await fetch(
           `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${MAPS_KEY}&language=en&components=country:in`
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in`
         );
         const data = await res.json();
         setSuggestions(data.predictions || []);
@@ -69,7 +70,7 @@ function LocationSearchModal({ visible, title, onSelect, onClose, gpsCoord, gpsL
     try {
       const res = await fetch(
         `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${prediction.place_id}&fields=geometry,formatted_address&key=${MAPS_KEY}`
+        `?place_id=${prediction.place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
       );
       const data = await res.json();
       if (data.result?.geometry) {
@@ -226,7 +227,7 @@ export default function BookingWizardScreen({ navigation, route }) {
         `https://maps.googleapis.com/maps/api/directions/json` +
         `?origin=${from.latitude},${from.longitude}` +
         `&destination=${to.latitude},${to.longitude}` +
-        `&key=${MAPS_KEY}`
+        `&key=${PLACES_KEY}`
       );
       const data = await res.json();
       if (data.routes?.length) {
