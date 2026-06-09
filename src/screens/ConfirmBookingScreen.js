@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from "react-native";
 import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
 
@@ -51,8 +51,31 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const distFare = Math.round(info.km * dist);
   const total = distFare + info.base;
 
-  function handleConfirm() {
-    navigation.navigate("Searching", { service: selectedType });
+  async function handleConfirm() {
+    try {
+      const response = await fetch("https://medifleet-backend.onrender.com/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pickupLabel,
+          dropLabel,
+          dist,
+          duration,
+          selectedType,
+          scheduleType,
+          scheduleDate,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || `Request failed with status ${response.status}`);
+      }
+
+      navigation.navigate("Searching", { service: selectedType });
+    } catch (error) {
+      Alert.alert("Booking Failed", error.message || "Something went wrong. Please try again.");
+    }
   }
 
   return (
