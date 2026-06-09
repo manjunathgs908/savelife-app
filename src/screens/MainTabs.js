@@ -5,7 +5,6 @@ import { COLORS } from "../theme";
 
 import HomeScreen from "./HomeScreen";
 import TripsScreen from "./TripsScreen";
-import FamilyScreen from "./FamilyScreen";
 import ProfileScreen from "./ProfileScreen";
 
 const Tab = createBottomTabNavigator();
@@ -33,7 +32,6 @@ export default function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: icon("🏠") }} />
       <Tab.Screen name="Trips" component={TripsScreen} options={{ tabBarIcon: icon("📋") }} />
-      <Tab.Screen name="Family" component={FamilyScreen} options={{ tabBarIcon: icon("👨‍👩‍👧") }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: icon("👤") }} />
     </Tab.Navigator>
   );

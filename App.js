@@ -19,6 +19,9 @@ import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
 import TrainAmbulanceScreen from "./src/screens/TrainAmbulanceScreen";
 import AirAmbulanceScreen from "./src/screens/AirAmbulanceScreen.jsx";
 import RemainsScreen from "./src/screens/RemainsScreen";
+import MapBookingScreen from "./src/screens/MapBookingScreen";
+import AmbulanceSelectScreen from "./src/screens/AmbulanceSelectScreen";
+import ConfirmBookingScreen from "./src/screens/ConfirmBookingScreen";
 import AntimYatraScreen from "./src/screens/AntimYatraScreen";
 import HomeCareScreen from "./src/screens/HomeCareScreen";
 import StandbyScreen from "./src/screens/StandbyScreen";
@@ -63,6 +66,9 @@ export default function App() {
             <Stack.Screen name="HomeCare" component={HomeCareScreen} />
             <Stack.Screen name="Standby" component={StandbyScreen} />
             <Stack.Screen name="Schedule" component={ScheduleScreen} />
+            <Stack.Screen name="MapBooking" component={MapBookingScreen} />
+            <Stack.Screen name="AmbulanceSelect" component={AmbulanceSelectScreen} />
+            <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </AppContext.Provider>
