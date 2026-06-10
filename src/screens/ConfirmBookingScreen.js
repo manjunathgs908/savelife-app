@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from "react-native";
 import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
 const _bls = getBookingConfig("bls");
 const _adv = getBookingConfig("als");
@@ -15,24 +16,6 @@ const AMB_RATES = {
   card: { km: 30,                    base: 1000, label: "Cardiac Emergency" },
   mort: { km: 18,                    base: 350,  label: "Mortuary / Remains" },
 };
-
-const BLS_SLABS = [
-  [1, 1200], [10, 1800], [20, 3000], [30, 4000], [40, 4500],
-  [100, 5500], [150, 6500], [200, 8000], [250, 10000], [300, 12000],
-];
-
-function calcBlsFare(km) {
-  if (km <= BLS_SLABS[0][0]) return BLS_SLABS[0][1];
-  for (let i = 1; i < BLS_SLABS.length; i++) {
-    const [x0, y0] = BLS_SLABS[i - 1];
-    const [x1, y1] = BLS_SLABS[i];
-    if (km <= x1) return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
-  }
-  // Beyond 300 km: extrapolate from the last segment
-  const [x0, y0] = BLS_SLABS[BLS_SLABS.length - 2];
-  const [x1, y1] = BLS_SLABS[BLS_SLABS.length - 1];
-  return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
-}
 
 function fmtDateTime(iso) {
   const d = new Date(iso);
@@ -61,15 +44,23 @@ export default function ConfirmBookingScreen({ navigation, route }) {
     dist, duration,
     scheduleType, scheduleDate,
     selectedType,
+    pricingList: passedPricing,
   } = route.params;
+
+  const [pricingList, setPricingList] = useState(passedPricing || []);
+
+  useEffect(() => {
+    if (passedPricing?.length) return; // already received from AmbulanceSelectScreen
+    fetch(PRICING_API)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .catch(() => {});
+  }, []);
 
   const amb = AMB_TYPES.find(a => a.id === selectedType) || AMB_TYPES[0];
   const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
-  const distFare = selectedType === "bls"
-    ? calcBlsFare(dist)
-    : Math.round(info.km * dist);
-  const total = distFare + info.base;
+  const { distFare, base, total } = calcFare(selectedType, dist, pricingList, AMB_RATES);
 
   async function handleConfirm() {
     try {
@@ -126,7 +117,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <Text style={styles.ambDesc}>{info.label}</Text>
           </View>
           <View style={styles.ambRate}>
-            <Text style={styles.ambRateTxt}>₹{info.km}/km</Text>
+            <Text style={styles.ambRateTxt}>{base === 0 ? "Slab pricing" : `₹${info.km}/km`}</Text>
           </View>
         </View>
 
@@ -198,14 +189,14 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
           <FareRow
             label={
-              selectedType === "bls"
+              base === 0
                 ? `Distance fare (${dist.toFixed(1)} km · slab pricing)`
                 : `Distance fare (${dist.toFixed(1)} km × ₹${info.km})`
             }
             value={`₹${distFare.toLocaleString()}`}
           />
-          {info.base > 0 && (
-            <FareRow label="Base charge" value={`₹${info.base.toLocaleString()}`} />
+          {base > 0 && (
+            <FareRow label="Base charge" value={`₹${base.toLocaleString()}`} />
           )}
           <View style={styles.fareDivider} />
           <FareRow label="Estimated Total" value={`₹${total.toLocaleString()}`} bold />

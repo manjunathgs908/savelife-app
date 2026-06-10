@@ -1,14 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
 } from "react-native";
 import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
 // Derive base km rates from getBookingConfig for bls / als / icu,
 // then assign reasonable rates for neo / card / mort.
-const _bls = getBookingConfig("bls");
-const _adv = getBookingConfig("als");
-
+bls: { km: _bls.vehicles[0].rate }
+als: { km: _adv.vehicles[0].rate }
+icu: { km: _adv.vehicles[1].rate }
 const AMB_RATES = {
   bls:  { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
   als:  { km: _adv.vehicles[0].rate, base: 500,  eta: "10", badge: "ADVANCED",       color: "#3b82f6" },
@@ -17,23 +18,6 @@ const AMB_RATES = {
   card: { km: 30,                    base: 1000, eta: "8",  badge: "CARDIAC",         color: COLORS.red },
   mort: { km: 18,                    base: 350,  eta: "20", badge: "DIGNIFIED",       color: "#8b5cf6" },
 };
-
-const BLS_SLABS = [
-  [1, 1200], [10, 1800], [20, 3000], [30, 4000], [40, 4500],
-  [100, 5500], [150, 6500], [200, 8000], [250, 10000], [300, 12000],
-];
-
-function calcBlsFare(km) {
-  if (km <= BLS_SLABS[0][0]) return BLS_SLABS[0][1];
-  for (let i = 1; i < BLS_SLABS.length; i++) {
-    const [x0, y0] = BLS_SLABS[i - 1];
-    const [x1, y1] = BLS_SLABS[i];
-    if (km <= x1) return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
-  }
-  const [x0, y0] = BLS_SLABS[BLS_SLABS.length - 2];
-  const [x1, y1] = BLS_SLABS[BLS_SLABS.length - 1];
-  return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
-}
 
 function fmtDate(iso) {
   if (!iso) return null;
@@ -47,16 +31,23 @@ function fmtDate(iso) {
 export default function AmbulanceSelectScreen({ navigation, route }) {
   const { pickupLabel, dropLabel, dist, duration, scheduleType, scheduleDate } = route.params;
   const [selected, setSelected] = useState("bls");
+  const [pricingList, setPricingList] = useState([]);
+
+  useEffect(() => {
+    fetch(PRICING_API)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .catch(() => {}); // silent fallback to local AMB_RATES
+  }, []);
 
   const r = AMB_RATES[selected];
-  const estTotal = selected === "bls"
-    ? calcBlsFare(dist)
-    : Math.round(r.km * dist) + r.base;
+  const estTotal = calcFare(selected, dist, pricingList, AMB_RATES).total;
 
   function handleNext() {
     navigation.navigate("ConfirmBooking", {
       ...route.params,
       selectedType: selected,
+      pricingList,
     });
   }
 
@@ -110,9 +101,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
 
         {AMB_TYPES.map(amb => {
           const info = AMB_RATES[amb.id];
-          const est = amb.id === "bls"
-            ? calcBlsFare(dist)
-            : Math.round(info.km * dist) + info.base;
+          const est = calcFare(amb.id, dist, pricingList, AMB_RATES).total;
           const isActive = selected === amb.id;
 
           return (
@@ -165,8 +154,8 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
         <View style={styles.noteBox}>
           <Text style={styles.noteIco}>ℹ️</Text>
           <Text style={styles.noteTxt}>
-            {selected === "bls"
-              ? `Estimated fare uses BLS slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`
+            {calcFare(selected, dist, pricingList, AMB_RATES).base === 0
+              ? `Estimated fare uses slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`
               : `Estimated fare = base charge + ₹${r.km}/km × ${dist.toFixed(1)} km. Final amount confirmed after booking.`
             }
           </Text>

@@ -15,7 +15,7 @@ export const LANGUAGES = ["EN", "KN", "HI", "TE", "TA", "ML"];
 export const t = (lang, en, kn, hi, te, ta, ml) =>
   lang === "KN" ? kn : lang === "HI" ? hi : lang === "TE" ? te : lang === "TA" ? ta : lang === "ML" ? ml : en;
 export const AMB_TYPES = [
-  { id: "bls", icon: "🚑", name: "BLS", desc: "Basic Life Support" },
+  { id: "bls", icon: "🚑", name: "BLS - Maruti Eeco", desc: "Basic Life Support" },
   { id: "als", icon: "🏥", name: "ALS", desc: "Advanced Life Support" },
   { id: "icu", icon: "🏥", name: "ICU", desc: "Mobile Intensive Care" },
   { id: "neo", icon: "👶", name: "Neonatal", desc: "Newborn Transport" },
