@@ -5,11 +5,9 @@ import {
 import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
-// Derive base km rates from getBookingConfig for bls / als / icu,
-// then assign reasonable rates for neo / card / mort.
-bls: { km: _bls.vehicles[0].rate }
-als: { km: _adv.vehicles[0].rate }
-icu: { km: _adv.vehicles[1].rate }
+const _bls = getBookingConfig("bls");
+const _adv = getBookingConfig("als");
+
 const AMB_RATES = {
   bls:  { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
   als:  { km: _adv.vehicles[0].rate, base: 500,  eta: "10", badge: "ADVANCED",       color: "#3b82f6" },

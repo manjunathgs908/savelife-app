@@ -18,8 +18,8 @@ export function calcFare(typeId, km, pricingList, fallbackRates) {
   );
 
   if (doc?.slabs?.length >= 2) {
-    // Normalise slab entries: accept [[km,price],...] or [{km,fare},...]
-    const pts = doc.slabs.map(s => Array.isArray(s) ? s : [s.km, s.fare]);
+    // Normalise slab entries: accept [[km,price],...] or [{km,price},...]
+    const pts = doc.slabs.map(s => Array.isArray(s) ? s : [s.km, s.price]);
 
     if (km <= pts[0][0]) return { distFare: pts[0][1], base: 0, total: pts[0][1] };
 
