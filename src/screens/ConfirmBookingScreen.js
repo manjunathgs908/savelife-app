@@ -16,6 +16,24 @@ const AMB_RATES = {
   mort: { km: 18,                    base: 350,  label: "Mortuary / Remains" },
 };
 
+const BLS_SLABS = [
+  [1, 1200], [10, 1800], [20, 3000], [30, 4000], [40, 4500],
+  [100, 5500], [150, 6500], [200, 8000], [250, 10000], [300, 12000],
+];
+
+function calcBlsFare(km) {
+  if (km <= BLS_SLABS[0][0]) return BLS_SLABS[0][1];
+  for (let i = 1; i < BLS_SLABS.length; i++) {
+    const [x0, y0] = BLS_SLABS[i - 1];
+    const [x1, y1] = BLS_SLABS[i];
+    if (km <= x1) return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+  }
+  // Beyond 300 km: extrapolate from the last segment
+  const [x0, y0] = BLS_SLABS[BLS_SLABS.length - 2];
+  const [x1, y1] = BLS_SLABS[BLS_SLABS.length - 1];
+  return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+}
+
 function fmtDateTime(iso) {
   const d = new Date(iso);
   return d.toLocaleString("en-IN", {
@@ -48,7 +66,9 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const amb = AMB_TYPES.find(a => a.id === selectedType) || AMB_TYPES[0];
   const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
-  const distFare = Math.round(info.km * dist);
+  const distFare = selectedType === "bls"
+    ? calcBlsFare(dist)
+    : Math.round(info.km * dist);
   const total = distFare + info.base;
 
   async function handleConfirm() {
@@ -177,7 +197,11 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           </View>
 
           <FareRow
-            label={`Distance fare (${dist.toFixed(1)} km × ₹${info.km})`}
+            label={
+              selectedType === "bls"
+                ? `Distance fare (${dist.toFixed(1)} km · slab pricing)`
+                : `Distance fare (${dist.toFixed(1)} km × ₹${info.km})`
+            }
             value={`₹${distFare.toLocaleString()}`}
           />
           {info.base > 0 && (
