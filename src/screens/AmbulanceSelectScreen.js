@@ -18,6 +18,23 @@ const AMB_RATES = {
   mort: { km: 18,                    base: 350,  eta: "20", badge: "DIGNIFIED",       color: "#8b5cf6" },
 };
 
+const BLS_SLABS = [
+  [1, 1200], [10, 1800], [20, 3000], [30, 4000], [40, 4500],
+  [100, 5500], [150, 6500], [200, 8000], [250, 10000], [300, 12000],
+];
+
+function calcBlsFare(km) {
+  if (km <= BLS_SLABS[0][0]) return BLS_SLABS[0][1];
+  for (let i = 1; i < BLS_SLABS.length; i++) {
+    const [x0, y0] = BLS_SLABS[i - 1];
+    const [x1, y1] = BLS_SLABS[i];
+    if (km <= x1) return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+  }
+  const [x0, y0] = BLS_SLABS[BLS_SLABS.length - 2];
+  const [x1, y1] = BLS_SLABS[BLS_SLABS.length - 1];
+  return Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+}
+
 function fmtDate(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -32,7 +49,9 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
   const [selected, setSelected] = useState("bls");
 
   const r = AMB_RATES[selected];
-  const estTotal = Math.round(r.km * dist) + r.base;
+  const estTotal = selected === "bls"
+    ? calcBlsFare(dist)
+    : Math.round(r.km * dist) + r.base;
 
   function handleNext() {
     navigation.navigate("ConfirmBooking", {
@@ -91,7 +110,9 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
 
         {AMB_TYPES.map(amb => {
           const info = AMB_RATES[amb.id];
-          const est = Math.round(info.km * dist) + info.base;
+          const est = amb.id === "bls"
+            ? calcBlsFare(dist)
+            : Math.round(info.km * dist) + info.base;
           const isActive = selected === amb.id;
 
           return (
@@ -144,8 +165,10 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
         <View style={styles.noteBox}>
           <Text style={styles.noteIco}>ℹ️</Text>
           <Text style={styles.noteTxt}>
-            Estimated fare = base charge + ₹{r.km}/km × {dist.toFixed(1)} km.
-            Final amount confirmed after booking.
+            {selected === "bls"
+              ? `Estimated fare uses BLS slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`
+              : `Estimated fare = base charge + ₹${r.km}/km × ${dist.toFixed(1)} km. Final amount confirmed after booking.`
+            }
           </Text>
         </View>
 
