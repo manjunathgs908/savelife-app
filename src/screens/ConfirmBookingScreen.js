@@ -48,6 +48,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   } = route.params;
 
   const [pricingList, setPricingList] = useState(passedPricing || []);
+  const [acEnabled, setAcEnabled] = useState(false);
+  const [oxygenEnabled, setOxygenEnabled] = useState(false);
 
   useEffect(() => {
     if (passedPricing?.length) return; // already received from AmbulanceSelectScreen
@@ -60,7 +62,15 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const amb = AMB_TYPES.find(a => a.id === selectedType) || AMB_TYPES[0];
   const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
-  const { distFare, base, total } = calcFare(selectedType, dist, pricingList, AMB_RATES);
+  const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
+
+  // AC and Oxygen prices: use per-km from API doc if available, else flat fallback
+  const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
+  const acPrice = pricingDoc?.acPerKm ? Math.round(pricingDoc.acPerKm * dist) : 200;
+  const oxygenPrice = pricingDoc?.oxygenPerKm ? Math.round(pricingDoc.oxygenPerKm * dist) : 300;
+
+  const addonFare = (acEnabled ? acPrice : 0) + (oxygenEnabled ? oxygenPrice : 0);
+  const total = baseFareTotal + addonFare;
 
   async function handleConfirm() {
     try {
@@ -75,6 +85,9 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           selectedType,
           scheduleType,
           scheduleDate,
+          acEnabled,
+          oxygenEnabled,
+          totalFare: total,
         }),
       });
 
@@ -180,6 +193,45 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           )}
         </View>
 
+        {/* Add-ons */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIco}>➕</Text>
+            <Text style={styles.cardTitle}>Add-ons</Text>
+            <Text style={styles.optionalTag}>Optional</Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.addonRow, acEnabled && styles.addonRowActive]}
+            onPress={() => setAcEnabled(v => !v)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.addonIco}>❄️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.addonName}>AC Ambulance</Text>
+              <Text style={styles.addonPrice}>+₹{acPrice.toLocaleString()}</Text>
+            </View>
+            <View style={[styles.checkbox, acEnabled && styles.checkboxActive]}>
+              {acEnabled && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.addonRow, oxygenEnabled && styles.addonRowActive]}
+            onPress={() => setOxygenEnabled(v => !v)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.addonIco}>🫁</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.addonName}>Oxygen Support</Text>
+              <Text style={styles.addonPrice}>+₹{oxygenPrice.toLocaleString()}</Text>
+            </View>
+            <View style={[styles.checkbox, oxygenEnabled && styles.checkboxActive]}>
+              {oxygenEnabled && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Fare breakdown */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -198,6 +250,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           {base > 0 && (
             <FareRow label="Base charge" value={`₹${base.toLocaleString()}`} />
           )}
+          {acEnabled && <FareRow label="AC charge" value={`₹${acPrice.toLocaleString()}`} />}
+          {oxygenEnabled && <FareRow label="Oxygen support" value={`₹${oxygenPrice.toLocaleString()}`} />}
           <View style={styles.fareDivider} />
           <FareRow label="Estimated Total" value={`₹${total.toLocaleString()}`} bold />
 
@@ -342,6 +396,35 @@ const styles = StyleSheet.create({
   laterIco: { fontSize: 24 },
   laterLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", marginBottom: 3 },
   laterDate: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+
+  // Add-ons
+  optionalTag: {
+    color: COLORS.grayDim, fontSize: 11, fontWeight: "600",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+  },
+  addonRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 12, borderRadius: 12, marginBottom: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
+  },
+  addonRowActive: {
+    backgroundColor: "rgba(232,25,44,0.08)",
+    borderColor: "rgba(232,25,44,0.4)",
+  },
+  addonIco: { fontSize: 24 },
+  addonName: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  addonPrice: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  checkbox: {
+    width: 24, height: 24, borderRadius: 7,
+    borderWidth: 2, borderColor: "rgba(255,255,255,0.3)",
+    alignItems: "center", justifyContent: "center",
+  },
+  checkboxActive: {
+    backgroundColor: COLORS.red, borderColor: COLORS.red,
+  },
+  checkmark: { color: COLORS.white, fontSize: 13, fontWeight: "700" },
 
   // Fare
   fareRow: {
