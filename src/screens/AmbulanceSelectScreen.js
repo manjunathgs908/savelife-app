@@ -28,6 +28,19 @@ const AMB_RATES = {
   body_mini:  { km: 18,                    base: 350,  eta: "18", badge: "DIGNIFIED",       color: "#8b5cf6" },
 };
 
+const AMB_FEATURES = {
+  als_tempo: [
+    "Oxygen Support",
+    "Cardiac Monitor",
+    "Suction Machine",
+    "Infusion Pump (2)",
+    "Ventilator",
+    "BiPAP",
+    "CPAP",
+    "Trained Paramedic",
+  ],
+};
+
 function fmtDate(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -158,6 +171,19 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
             </TouchableOpacity>
           );
         })}
+
+        {/* Features panel — shown when selected ambulance has a features list */}
+        {AMB_FEATURES[selected] && (
+          <View style={styles.featuresBox}>
+            <Text style={styles.featuresTitle}>Included Equipment</Text>
+            {AMB_FEATURES[selected].map(f => (
+              <View key={f} style={styles.featureRow}>
+                <Text style={styles.featureCheck}>✓</Text>
+                <Text style={styles.featureTxt}>{f}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Pricing note */}
         <View style={styles.noteBox}>
@@ -290,6 +316,22 @@ const styles = StyleSheet.create({
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: COLORS.red,
   },
+
+  // Features panel
+  featuresBox: {
+    backgroundColor: "rgba(34,197,94,0.06)",
+    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(34,197,94,0.2)",
+    padding: 14, marginBottom: 10,
+  },
+  featuresTitle: {
+    color: COLORS.green, fontSize: 11, fontWeight: "700",
+    letterSpacing: 0.8, marginBottom: 10,
+  },
+  featureRow: {
+    flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4,
+  },
+  featureCheck: { color: COLORS.green, fontSize: 13, fontWeight: "700", width: 16 },
+  featureTxt: { color: COLORS.white, fontSize: 13 },
 
   // Pricing note
   noteBox: {

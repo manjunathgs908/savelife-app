@@ -49,7 +49,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   const [pricingList, setPricingList] = useState(passedPricing || []);
   const [acEnabled, setAcEnabled] = useState(false);
-  const [oxygenEnabled, setOxygenEnabled] = useState(false);
 
   useEffect(() => {
     if (passedPricing?.length) return; // already received from AmbulanceSelectScreen
@@ -64,13 +63,11 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
 
-  // AC and Oxygen prices: use per-km from API doc if available, else flat fallback
+  // AC price: use per-km from API doc if available, else flat fallback
   const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
   const acPrice = pricingDoc?.acPerKm ? Math.round(pricingDoc.acPerKm * dist) : 200;
-  const oxygenPrice = pricingDoc?.oxygenPerKm ? Math.round(pricingDoc.oxygenPerKm * dist) : 300;
 
-  const addonFare = (acEnabled ? acPrice : 0) + (oxygenEnabled ? oxygenPrice : 0);
-  const total = baseFareTotal + addonFare;
+  const total = baseFareTotal + (acEnabled ? acPrice : 0);
 
   async function handleConfirm() {
     try {
@@ -86,7 +83,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           scheduleType,
           scheduleDate,
           acEnabled,
-          oxygenEnabled,
           totalFare: total,
         }),
       });
@@ -216,20 +212,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.addonRow, oxygenEnabled && styles.addonRowActive]}
-            onPress={() => setOxygenEnabled(v => !v)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addonIco}>🫁</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.addonName}>Oxygen Support</Text>
-              <Text style={styles.addonPrice}>+₹{oxygenPrice.toLocaleString()}</Text>
-            </View>
-            <View style={[styles.checkbox, oxygenEnabled && styles.checkboxActive]}>
-              {oxygenEnabled && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-          </TouchableOpacity>
         </View>
 
         {/* Fare breakdown */}
@@ -251,7 +233,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <FareRow label="Base charge" value={`₹${base.toLocaleString()}`} />
           )}
           {acEnabled && <FareRow label="AC charge" value={`₹${acPrice.toLocaleString()}`} />}
-          {oxygenEnabled && <FareRow label="Oxygen support" value={`₹${oxygenPrice.toLocaleString()}`} />}
           <View style={styles.fareDivider} />
           <FareRow label="Estimated Total" value={`₹${total.toLocaleString()}`} bold />
 
