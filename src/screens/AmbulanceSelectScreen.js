@@ -20,7 +20,7 @@ const AMBULANCE_TYPES = [
 
 const AMB_RATES = {
   bls:        { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
-  bls_tempo:  { km: _bls.vehicles[0].rate, base: 0,    eta: "10", badge: "BLS",            color: "#22c55e" },
+  bls_tempo:  {                             eta: "10", badge: "BLS",            color: "#22c55e" },
   als_tempo:  { km: _adv.vehicles[0].rate, base: 500,  eta: "12", badge: "ADVANCED",       color: "#3b82f6" },
   acls_tempo: { km: 30,                    base: 1000, eta: "12", badge: "CARDIAC",         color: COLORS.red },
   nicu_tempo: { km: 25,                    base: 600,  eta: "15", badge: "NEONATAL",        color: "#f59e0b" },
@@ -139,7 +139,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
                   <Text style={styles.ambDesc}>{amb.desc}</Text>
                   <View style={styles.metaRow}>
                     <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                    <Text style={styles.metaChip}>₹{info.km}/km</Text>
+                    {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
                     {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
                   </View>
                 </View>

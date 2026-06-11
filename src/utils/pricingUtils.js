@@ -46,8 +46,9 @@ export function calcFare(typeId, km, pricingList, fallbackRates) {
     return { distFare: fare, base: 0, total: fare };
   }
 
-  // Fallback: local per-km rates
-  const info = fallbackRates[typeId] || fallbackRates.bls;
+  // Fallback: local per-km rates (only for types that define km in AMB_RATES)
+  const info = fallbackRates[typeId];
+  if (!info?.km) return { distFare: 0, base: 0, total: 0 };
   const distFare = Math.round(info.km * km);
   const base = info.base || 0;
   return { distFare, base, total: distFare + base };
