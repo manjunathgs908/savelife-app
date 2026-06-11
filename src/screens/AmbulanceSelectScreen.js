@@ -39,6 +39,22 @@ const AMB_FEATURES = {
     "CPAP",
     "Trained Paramedic",
   ],
+  acls_tempo: [
+    "Ventilator",
+    "Defibrillator (AED)",
+    "Cardiac Monitor",
+    "Multi Parameter Monitor",
+    "Oxygen Support",
+    "Suction Machine",
+    "Infusion Pump",
+    "Syringe Pump",
+    "BiPAP",
+    "CPAP",
+    "AC Ambulance",
+    "Spine Board",
+    "Scoop Stretcher",
+    "Trained Critical Care Paramedic",
+  ],
 };
 
 function fmtDate(iso) {
