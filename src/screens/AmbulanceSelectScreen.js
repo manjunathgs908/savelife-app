@@ -2,19 +2,28 @@ import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
 } from "react-native";
-import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
+import { COLORS, getBookingConfig } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
 const _bls = getBookingConfig("bls");
 const _adv = getBookingConfig("als");
 
+const AMBULANCE_TYPES = [
+  { id: "bls",        icon: "🚑",  name: "BLS - Maruti Eeco",              desc: "Basic Life Support" },
+  { id: "bls_tempo",  icon: "🚐",  name: "BLS Tempo Traveller",            desc: "Basic Life Support Tempo Traveller" },
+  { id: "als_tempo",  icon: "🚐",  name: "ALS Tempo Traveller",            desc: "Advanced Life Support Tempo Traveller" },
+  { id: "acls_tempo", icon: "🚐",  name: "ACLS Tempo Traveller",           desc: "Advanced Cardiac Life Support Tempo Traveller" },
+  { id: "nicu_tempo", icon: "🚐",  name: "NICU Tempo Traveller",           desc: "Newborn Intensive Care Transport" },
+  { id: "body_tempo", icon: "🚐",  name: "Body Shifting Tempo Traveller",  desc: "Dead Body Transport" },
+];
+
 const AMB_RATES = {
-  bls:  { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
-  als:  { km: _adv.vehicles[0].rate, base: 500,  eta: "10", badge: "ADVANCED",       color: "#3b82f6" },
-  icu:  { km: _adv.vehicles[1].rate, base: 800,  eta: "14", badge: "CRITICAL CARE",  color: COLORS.red },
-  neo:  { km: 25,                    base: 600,  eta: "15", badge: "NEONATAL",        color: "#f59e0b" },
-  card: { km: 30,                    base: 1000, eta: "8",  badge: "CARDIAC",         color: COLORS.red },
-  mort: { km: 18,                    base: 350,  eta: "20", badge: "DIGNIFIED",       color: "#8b5cf6" },
+  bls:        { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
+  bls_tempo:  { km: _bls.vehicles[0].rate, base: 0,    eta: "10", badge: "BLS",            color: "#22c55e" },
+  als_tempo:  { km: _adv.vehicles[0].rate, base: 500,  eta: "12", badge: "ADVANCED",       color: "#3b82f6" },
+  acls_tempo: { km: 30,                    base: 1000, eta: "12", badge: "CARDIAC",         color: COLORS.red },
+  nicu_tempo: { km: 25,                    base: 600,  eta: "15", badge: "NEONATAL",        color: "#f59e0b" },
+  body_tempo: { km: 18,                    base: 350,  eta: "20", badge: "DIGNIFIED",       color: "#8b5cf6" },
 };
 
 function fmtDate(iso) {
@@ -97,7 +106,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
       >
         <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
 
-        {AMB_TYPES.map(amb => {
+        {AMBULANCE_TYPES.map(amb => {
           const info = AMB_RATES[amb.id];
           const est = calcFare(amb.id, dist, pricingList, AMB_RATES).total;
           const isActive = selected === amb.id;
@@ -165,7 +174,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
       {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
-          <Text style={styles.footerLabel}>Selected · {AMB_TYPES.find(a => a.id === selected)?.name}</Text>
+          <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selected)?.name}</Text>
           <Text style={styles.footerPrice}>₹{estTotal.toLocaleString()} est.</Text>
         </View>
         <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
