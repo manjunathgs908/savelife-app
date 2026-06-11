@@ -9,12 +9,12 @@ const _bls = getBookingConfig("bls");
 const _adv = getBookingConfig("als");
 
 const AMBULANCE_TYPES = [
-  { id: "bls",        icon: "🚑",  name: "BLS - Maruti Eeco",              desc: "Basic Life Support" },
-  { id: "bls_tempo",  icon: "🚐",  name: "BLS Tempo Traveller",            desc: "Basic Life Support Tempo Traveller" },
-  { id: "als_tempo",  icon: "🚐",  name: "ALS Tempo Traveller",            desc: "Advanced Life Support Tempo Traveller" },
-  { id: "acls_tempo", icon: "🚐",  name: "ACLS Tempo Traveller",           desc: "Advanced Cardiac Life Support Tempo Traveller" },
-  { id: "nicu_tempo", icon: "🚐",  name: "NICU Tempo Traveller",           desc: "Newborn Intensive Care Transport" },
-  { id: "body_tempo", icon: "🚐",  name: "Body Shifting Tempo Traveller",  desc: "Dead Body Transport" },
+  { id: "bls",        icon: "🚑",  name: "BLS Ambulance",           desc: "Basic Life Support • Maruti Eeco" },
+  { id: "bls_tempo",  icon: "🚐",  name: "BLS Ambulance",           desc: "Basic Life Support • Tempo Traveller" },
+  { id: "als_tempo",  icon: "🚐",  name: "ALS Ambulance",           desc: "Advanced Life Support • Tempo Traveller" },
+  { id: "acls_tempo", icon: "🚐",  name: "ACLS Ambulance",          desc: "Advanced Cardiac Life Support • Tempo Traveller" },
+  { id: "nicu_tempo", icon: "🚐",  name: "NICU Ambulance",          desc: "Newborn Intensive Care Transport • Tempo Traveller" },
+  { id: "body_tempo", icon: "🚐",  name: "Body Shifting Ambulance", desc: "Dead Body Transport • Tempo Traveller" },
 ];
 
 const AMB_RATES = {
