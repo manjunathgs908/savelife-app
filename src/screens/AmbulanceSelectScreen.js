@@ -127,63 +127,64 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
           const isActive = selected === amb.id;
 
           return (
-            <TouchableOpacity
-              key={amb.id}
-              style={[styles.card, isActive && styles.cardActive]}
-              onPress={() => setSelected(amb.id)}
-              activeOpacity={0.8}
-            >
-              {/* Badge */}
-              {info.badge ? (
-                <View style={[styles.badge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
-                  <Text style={[styles.badgeTxt, { color: info.color }]}>{info.badge}</Text>
-                </View>
-              ) : null}
+            <React.Fragment key={amb.id}>
+              <TouchableOpacity
+                style={[styles.card, isActive && styles.cardActive]}
+                onPress={() => setSelected(amb.id)}
+                activeOpacity={0.8}
+              >
+                {/* Badge */}
+                {info.badge ? (
+                  <View style={[styles.badge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
+                    <Text style={[styles.badgeTxt, { color: info.color }]}>{info.badge}</Text>
+                  </View>
+                ) : null}
 
-              <View style={styles.cardMain}>
-                {/* Icon */}
-                <View style={[styles.iconBox, isActive && { backgroundColor: COLORS.red + "22" }]}>
-                  <Text style={{ fontSize: 28 }}>{amb.icon}</Text>
-                </View>
+                <View style={styles.cardMain}>
+                  {/* Icon */}
+                  <View style={[styles.iconBox, isActive && { backgroundColor: COLORS.red + "22" }]}>
+                    <Text style={{ fontSize: 28 }}>{amb.icon}</Text>
+                  </View>
 
-                {/* Info */}
-                <View style={styles.cardInfo}>
-                  <Text style={styles.ambName}>{amb.name}</Text>
-                  <Text style={styles.ambDesc}>{amb.desc}</Text>
-                  <View style={styles.metaRow}>
-                    <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                    {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
-                    {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
+                  {/* Info */}
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.ambName}>{amb.name}</Text>
+                    <Text style={styles.ambDesc}>{amb.desc}</Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
+                      {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
+                      {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
+                    </View>
+                  </View>
+
+                  {/* Price + radio */}
+                  <View style={styles.priceCol}>
+                    <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
+                      ₹{est.toLocaleString()}
+                    </Text>
+                    <Text style={styles.priceEst}>est.</Text>
+                    <View style={[styles.radio, isActive && styles.radioActive]}>
+                      {isActive && <View style={styles.radioDot} />}
+                    </View>
                   </View>
                 </View>
+              </TouchableOpacity>
 
-                {/* Price + radio */}
-                <View style={styles.priceCol}>
-                  <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
-                    ₹{est.toLocaleString()}
-                  </Text>
-                  <Text style={styles.priceEst}>est.</Text>
-                  <View style={[styles.radio, isActive && styles.radioActive]}>
-                    {isActive && <View style={styles.radioDot} />}
-                  </View>
+              {/* Equipment list — visible immediately below card when selected */}
+              {isActive && AMB_FEATURES[amb.id] && (
+                <View style={styles.featuresBox}>
+                  <Text style={styles.featuresTitle}>Included Equipment</Text>
+                  {AMB_FEATURES[amb.id].map(f => (
+                    <View key={f} style={styles.featureRow}>
+                      <Text style={styles.featureCheck}>✓</Text>
+                      <Text style={styles.featureTxt}>{f}</Text>
+                    </View>
+                  ))}
                 </View>
-              </View>
-            </TouchableOpacity>
+              )}
+            </React.Fragment>
           );
         })}
-
-        {/* Features panel — shown when selected ambulance has a features list */}
-        {AMB_FEATURES[selected] && (
-          <View style={styles.featuresBox}>
-            <Text style={styles.featuresTitle}>Included Equipment</Text>
-            {AMB_FEATURES[selected].map(f => (
-              <View key={f} style={styles.featureRow}>
-                <Text style={styles.featureCheck}>✓</Text>
-                <Text style={styles.featureTxt}>{f}</Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* Pricing note */}
         <View style={styles.noteBox}>
