@@ -14,7 +14,8 @@ const AMBULANCE_TYPES = [
   { id: "als_tempo",  icon: "🚐",  name: "ALS Ambulance",           desc: "Advanced Life Support • Tempo Traveller" },
   { id: "acls_tempo", icon: "🚐",  name: "ACLS Ambulance",          desc: "Advanced Cardiac Life Support • Tempo Traveller" },
   { id: "nicu_tempo", icon: "🚐",  name: "NICU Ambulance",          desc: "Newborn Intensive Care Transport • Tempo Traveller" },
-  { id: "body_tempo", icon: "🚐",  name: "Body Shifting Ambulance", desc: "Dead Body Transport • Tempo Traveller" },
+  { id: "body_tempo", icon: "🚐",  name: "Body Shifting Ambulance",      desc: "Dead Body Transport • Tempo Traveller" },
+  { id: "body_mini",  icon: "🚑",  name: "Body Shifting Mini Ambulance", desc: "Dead Body Transport • Maruti Eeco" },
 ];
 
 const AMB_RATES = {
@@ -24,6 +25,7 @@ const AMB_RATES = {
   acls_tempo: { km: 30,                    base: 1000, eta: "12", badge: "CARDIAC",         color: COLORS.red },
   nicu_tempo: { km: 25,                    base: 600,  eta: "15", badge: "NEONATAL",        color: "#f59e0b" },
   body_tempo: { km: 18,                    base: 350,  eta: "20", badge: "DIGNIFIED",       color: "#8b5cf6" },
+  body_mini:  { km: 18,                    base: 350,  eta: "18", badge: "DIGNIFIED",       color: "#8b5cf6" },
 };
 
 function fmtDate(iso) {
