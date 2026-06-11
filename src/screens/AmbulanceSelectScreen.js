@@ -85,6 +85,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
     navigation.navigate("ConfirmBooking", {
       ...route.params,
       selectedType: selected,
+      selectedAmb: AMBULANCE_TYPES.find(a => a.id === selected),
       pricingList,
     });
   }

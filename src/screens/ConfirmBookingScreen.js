@@ -2,19 +2,25 @@ import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from "react-native";
-import { COLORS, AMB_TYPES, getBookingConfig } from "../theme";
+import { COLORS, getBookingConfig } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
 const _bls = getBookingConfig("bls");
 const _adv = getBookingConfig("als");
 
 const AMB_RATES = {
-  bls:  { km: _bls.vehicles[0].rate, base: 0,    label: "Basic Life Support" },
-  als:  { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support" },
-  icu:  { km: _adv.vehicles[1].rate, base: 800,  label: "Mobile Intensive Care" },
-  neo:  { km: 25,                    base: 600,  label: "Neonatal Transport" },
-  card: { km: 30,                    base: 1000, label: "Cardiac Emergency" },
-  mort: { km: 18,                    base: 350,  label: "Mortuary / Remains" },
+  bls:        { km: _bls.vehicles[0].rate, base: 0,    label: "Basic Life Support" },
+  bls_tempo:  {                            base: 0,    label: "Basic Life Support • Tempo Traveller" },
+  als:        { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support" },
+  als_tempo:  { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support • Tempo Traveller" },
+  acls_tempo: { km: 30,                    base: 1000, label: "Advanced Cardiac Life Support • Tempo Traveller" },
+  icu:        { km: _adv.vehicles[1].rate, base: 800,  label: "Mobile Intensive Care" },
+  nicu_tempo: { km: 25,                    base: 600,  label: "Newborn Intensive Care Transport • Tempo Traveller" },
+  neo:        { km: 25,                    base: 600,  label: "Neonatal Transport" },
+  card:       { km: 30,                    base: 1000, label: "Cardiac Emergency" },
+  body_tempo: { km: 18,                    base: 350,  label: "Dead Body Transport • Tempo Traveller" },
+  body_mini:  { km: 18,                    base: 350,  label: "Dead Body Transport • Maruti Eeco" },
+  mort:       { km: 18,                    base: 350,  label: "Mortuary / Remains" },
 };
 
 function fmtDateTime(iso) {
@@ -44,6 +50,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
     dist, duration,
     scheduleType, scheduleDate,
     selectedType,
+    selectedAmb,
     pricingList: passedPricing,
   } = route.params;
 
@@ -58,7 +65,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
       .catch(() => {});
   }, []);
 
-  const amb = AMB_TYPES.find(a => a.id === selectedType) || AMB_TYPES[0];
+  const amb = selectedAmb || { icon: "🚑", name: "Ambulance", desc: "" };
   const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
   const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
