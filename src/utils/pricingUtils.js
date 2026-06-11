@@ -33,10 +33,15 @@ export function calcFare(typeId, km, pricingList, fallbackRates) {
       }
     }
     if (fare === null) {
-      // Beyond last slab — extrapolate from final segment
-      const [x0, y0] = pts[pts.length - 2];
-      const [x1, y1] = pts[pts.length - 1];
-      fare = Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+      const [lastKm, lastPrice] = pts[pts.length - 1];
+      if (doc.after300KmRate) {
+        // Use MongoDB-defined per-km rate beyond the final slab point
+        fare = Math.round(lastPrice + (km - lastKm) * doc.after300KmRate);
+      } else {
+        const [x0, y0] = pts[pts.length - 2];
+        const [x1, y1] = pts[pts.length - 1];
+        fare = Math.round(y0 + (km - x0) * (y1 - y0) / (x1 - x0));
+      }
     }
     return { distFare: fare, base: 0, total: fare };
   }
