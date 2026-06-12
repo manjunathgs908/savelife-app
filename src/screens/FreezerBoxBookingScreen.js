@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { COLORS } from '../theme';
 
 // Google Maps API key — sourced from environment variable with a fallback for local dev
 const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY';
@@ -365,8 +366,8 @@ export default function FreezerBoxBookingScreen({ navigation }) {
                     </Text>
                   </View>
                   <Switch
-                    trackColor={{ false: '#333', true: '#EF4444' }}
-                    thumbColor={includeEmbalming ? '#FFF' : '#888'}
+                    trackColor={{ false: 'rgba(0,0,0,0.1)', true: COLORS.red }}
+                    thumbColor={COLORS.white}
                     value={includeEmbalming}
                     onValueChange={setIncludeEmbalming}
                   />
@@ -503,95 +504,95 @@ export default function FreezerBoxBookingScreen({ navigation }) {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0A0A0A' },
+  screen: { flex: 1, backgroundColor: COLORS.bg },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 50, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
-  backArrow: { color: '#fff', fontSize: 20 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  headerSubtitle: { color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 50, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.07)' },
+  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' },
+  backArrow: { color: COLORS.text, fontSize: 20 },
+  headerTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
+  headerSubtitle: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
 
   // Scroll
   scrollContent: { padding: 16, paddingBottom: 50 },
 
   // Banner
   bannerCard: { backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.25)', borderRadius: 14, padding: 14, marginBottom: 16 },
-  bannerText: { color: '#ccc', fontSize: 13, lineHeight: 18 },
+  bannerText: { color: COLORS.gray, fontSize: 13, lineHeight: 18 },
   availabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  availabilityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#EF4444' },
-  availabilityText: { fontSize: 11, color: '#EF4444', fontWeight: '600' },
+  availabilityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.red },
+  availabilityText: { fontSize: 11, color: COLORS.red, fontWeight: '600' },
 
   // Card / section
-  card: { backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 16, marginBottom: 14 },
+  card: { backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 16, padding: 16, marginBottom: 14 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  stepBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center' },
-  stepNumber: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  cardTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  stepBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.red, alignItems: 'center', justifyContent: 'center' },
+  stepNumber: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
+  cardTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
 
   // Box type option rows
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, marginBottom: 10 },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 12, marginBottom: 10 },
   optionRowActive: { borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.08)' },
   optionIcon: { fontSize: 26 },
   optionInfo: { flex: 1 },
-  optionName: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  optionDesc: { color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 },
+  optionName: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  optionDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
 
   // Generic list rows (duration, floor)
-  listRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 10, marginBottom: 8 },
+  listRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 10, marginBottom: 8 },
   listRowActive: { borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.08)' },
   listRowContent: { flex: 1 },
-  listRowTitle: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  discountLabel: { color: '#22c55e', fontSize: 11, marginTop: 3 },
+  listRowTitle: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
+  discountLabel: { color: COLORS.green, fontSize: 11, marginTop: 3 },
 
   // Radio button
-  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#555', alignItems: 'center', justifyContent: 'center' },
-  radioOuterActive: { borderColor: '#EF4444' },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444' },
+  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.grayDim, alignItems: 'center', justifyContent: 'center' },
+  radioOuterActive: { borderColor: COLORS.red },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
 
   // Map
-  mapContainer: { height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: 12, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)' },
+  mapContainer: { height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: 12, borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.1)' },
   map: { flex: 1 },
 
   // Confirm location button
-  confirmBtn: { backgroundColor: '#EF4444', padding: 13, borderRadius: 10, alignItems: 'center', marginBottom: 10 },
-  confirmBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  confirmBtn: { backgroundColor: COLORS.red, padding: 13, borderRadius: 10, alignItems: 'center', marginBottom: 10 },
+  confirmBtnText: { color: COLORS.white, fontSize: 14, fontWeight: '700' },
   disabledBtn: { opacity: 0.6 },
 
   // Area badge (shown after geocoding)
   areaBadge: { borderRadius: 10, padding: 12, marginTop: 4 },
   areaBadgeVip: { backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.4)' },
   areaBadgeNormal: { backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 0.5, borderColor: 'rgba(34,197,94,0.3)' },
-  areaBadgeTitle: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  areaBadgeAddress: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 4 },
+  areaBadgeTitle: { color: COLORS.text, fontSize: 13, fontWeight: '700' },
+  areaBadgeAddress: { color: COLORS.grayDim, fontSize: 12, marginTop: 4 },
 
   // Embalming
   embalmingRow: { flexDirection: 'row', alignItems: 'center' },
 
   // Floor
   floorRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  freeLabel: { color: '#22c55e', fontSize: 12, fontWeight: '700' },
-  chargeLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' },
+  freeLabel: { color: COLORS.green, fontSize: 12, fontWeight: '700' },
+  chargeLabel: { color: COLORS.grayDim, fontSize: 12, fontWeight: '600' },
 
   // Inputs
-  fieldHint: { color: 'rgba(255,255,255,0.35)', fontSize: 12, marginBottom: 12, marginTop: -4 },
-  fieldLabel: { color: 'rgba(255,255,255,0.35)', fontSize: 11, letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
-  input: { backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14, marginBottom: 14 },
+  fieldHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 12, marginTop: -4 },
+  fieldLabel: { color: COLORS.grayDim, fontSize: 11, letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
+  input: { backgroundColor: 'rgba(0,0,0,0.05)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 10, padding: 12, color: COLORS.text, fontSize: 14, marginBottom: 14 },
 
   // Bill card
-  billCard: { backgroundColor: 'rgba(7,20,34,0.95)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.3)', borderRadius: 16, padding: 16, marginBottom: 16 },
-  billTitle: { color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 14 },
+  billCard: { backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.3)', borderRadius: 16, padding: 16, marginBottom: 16 },
+  billTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700', marginBottom: 14 },
   billLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  billLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13 },
-  billValue: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  billLabelGreen: { color: '#22c55e', fontSize: 13 },
-  billValueGreen: { color: '#22c55e', fontSize: 13, fontWeight: '600' },
-  billDivider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 10 },
-  billTotalLabel: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  billTotal: { color: '#EF4444', fontSize: 22, fontWeight: '800' },
+  billLabel: { color: COLORS.grayDim, fontSize: 13 },
+  billValue: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
+  billLabelGreen: { color: COLORS.green, fontSize: 13 },
+  billValueGreen: { color: COLORS.green, fontSize: 13, fontWeight: '600' },
+  billDivider: { height: 0.5, backgroundColor: 'rgba(0,0,0,0.1)', marginVertical: 10 },
+  billTotalLabel: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
+  billTotal: { color: COLORS.red, fontSize: 22, fontWeight: '800' },
 
   // Submit
-  submitButton: { backgroundColor: '#EF4444', borderRadius: 14, padding: 17, alignItems: 'center', marginBottom: 10 },
-  submitText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  submitNote: { textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 11, marginBottom: 10 },
+  submitButton: { backgroundColor: COLORS.red, borderRadius: 14, padding: 17, alignItems: 'center', marginBottom: 10 },
+  submitText: { color: COLORS.white, fontSize: 15, fontWeight: '700' },
+  submitNote: { textAlign: 'center', color: COLORS.grayDim, fontSize: 11, marginBottom: 10 },
 });

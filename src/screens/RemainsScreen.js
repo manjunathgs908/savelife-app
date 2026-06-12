@@ -295,10 +295,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" },
-  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10 },
-  backArrow: { color: COLORS.white, fontSize: 20 },
-  headerTitle: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)" },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.06)", borderRadius: 10 },
+  backArrow: { color: COLORS.text, fontSize: 20 },
+  headerTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   headerSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 1 },
 
   scrollContent: { padding: 18, gap: 12 },
@@ -306,46 +306,46 @@ const styles = StyleSheet.create({
   // Banner
   banner: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "rgba(232,25,44,0.12)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14, padding: 16, marginBottom: 4 },
   bannerIcon: { fontSize: 30 },
-  bannerTitle: { color: COLORS.white, fontSize: 13, fontWeight: "600", lineHeight: 19, flexShrink: 1 },
+  bannerTitle: { color: COLORS.text, fontSize: 13, fontWeight: "600", lineHeight: 19, flexShrink: 1 },
   bannerBadge: { color: COLORS.red, fontSize: 12, fontWeight: "600", marginTop: 4 },
 
   // Card
-  card: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 14, padding: 16 },
+  card: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 16 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   cardIcon: { fontSize: 18 },
-  cardTitle: { color: COLORS.white, fontSize: 15, fontWeight: "600" },
+  cardTitle: { color: COLORS.text, fontSize: 15, fontWeight: "600" },
 
   // Form fields
   label: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
-  input: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.white },
+  input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.text },
   row: { flexDirection: "row", alignItems: "flex-start", gap: 6, flexWrap: "nowrap" },
 
   // Toggle buttons (gender)
-  toggleBtn: { flex: 1, paddingVertical: 9, alignItems: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 8 },
+  toggleBtn: { flex: 1, paddingVertical: 9, alignItems: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 8 },
   toggleBtnActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   toggleBtnText: { color: COLORS.grayDim, fontSize: 12, fontWeight: "600" },
   toggleBtnTextActive: { color: COLORS.white, fontWeight: "700" },
 
   // Cause chips
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  chip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" },
+  chip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
   chipActive: { backgroundColor: "rgba(232,25,44,0.15)", borderColor: "rgba(232,25,44,0.5)" },
   chipText: { color: COLORS.grayDim, fontSize: 12 },
   chipTextActive: { color: COLORS.red, fontWeight: "600" },
 
   // Date chips
   dateChipScroll: { marginTop: 4, marginBottom: 4 },
-  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)" },
+  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)" },
   dateChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   dateChipDay: { color: COLORS.grayDim, fontSize: 8, fontWeight: "700", letterSpacing: 0.3, marginBottom: 2 },
-  dateChipNum: { color: COLORS.white, fontSize: 17, fontWeight: "800", lineHeight: 20 },
+  dateChipNum: { color: COLORS.text, fontSize: 17, fontWeight: "800", lineHeight: 20 },
   dateChipMon: { color: COLORS.grayDim, fontSize: 8, marginTop: 2 },
 
   // Switch rows
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
-  switchLabel: { color: COLORS.white, fontSize: 14, fontWeight: "600", marginBottom: 2 },
+  switchLabel: { color: COLORS.text, fontSize: 14, fontWeight: "600", marginBottom: 2 },
   switchDesc: { color: COLORS.grayDim, fontSize: 12, lineHeight: 17, paddingRight: 8 },
-  divider: { height: 0.5, backgroundColor: "rgba(255,255,255,0.07)", marginVertical: 14 },
+  divider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.07)", marginVertical: 14 },
 
   // Pricing
   pricingBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "rgba(59,130,246,0.07)", borderWidth: 0.5, borderColor: "rgba(59,130,246,0.25)", borderRadius: 12, padding: 14 },

@@ -39,7 +39,7 @@ export default function App() {
     <SafeAreaProvider>
       <AppContext.Provider value={{ lang, setLang }}>
         <NavigationContainer>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <Stack.Navigator
             initialRouteName="Splash"
             screenOptions={{

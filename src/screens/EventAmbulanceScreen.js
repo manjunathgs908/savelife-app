@@ -177,7 +177,7 @@ export default function EventAmbulanceScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>&#8592;</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>&#8592;</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Event Ambulance</Text>
@@ -200,7 +200,7 @@ export default function EventAmbulanceScreen({ navigation }) {
           <TextInput style={styles.input} placeholder="Ex: Bangalore Marathon 2025" placeholderTextColor={COLORS.grayDim} value={eventName} onChangeText={setEventName} />
           <Text style={styles.fieldLabel}>Purpose</Text>
           <TouchableOpacity style={[styles.selectBtn, purpose && styles.selectBtnActive]} onPress={() => setPurposeModal(true)}>
-            <Text style={[styles.selectBtnText, purpose && { color: COLORS.white }]}>{purpose || "Select purpose"}</Text>
+            <Text style={[styles.selectBtnText, purpose && { color: COLORS.text }]}>{purpose || "Select purpose"}</Text>
             <Text style={{ color: COLORS.grayDim }}>v</Text>
           </TouchableOpacity>
         </View>
@@ -324,60 +324,60 @@ export default function EventAmbulanceScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
-  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" },
-  back: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 18, fontWeight: "700" },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)" },
+  back: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.text, fontSize: 18, fontWeight: "700" },
   subtitle: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   scroll: { padding: 16, paddingBottom: 40 },
   heroBanner: { backgroundColor: "rgba(232,25,44,0.08)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.25)", borderRadius: 14, padding: 14, marginBottom: 16 },
-  heroText: { color: "#ccc", fontSize: 13, lineHeight: 18 },
+  heroText: { color: COLORS.gray, fontSize: 13, lineHeight: 18 },
   liveBadge: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.red },
   liveText: { fontSize: 11, color: COLORS.red, fontWeight: "600" },
-  section: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 16, padding: 16, marginBottom: 14 },
-  sectionTitle: { color: COLORS.white, fontSize: 15, fontWeight: "700", marginBottom: 14 },
+  section: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 16, padding: 16, marginBottom: 14 },
+  sectionTitle: { color: COLORS.text, fontSize: 15, fontWeight: "700", marginBottom: 14 },
   fieldLabel: { color: COLORS.grayDim, fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
-  input: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 12, color: COLORS.white, fontSize: 14, marginBottom: 14 },
-  selectBtn: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 12, color: COLORS.text, fontSize: 14, marginBottom: 14 },
+  selectBtn: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   selectBtnActive: { borderColor: "rgba(232,25,44,0.4)" },
   selectBtnText: { color: COLORS.grayDim, fontSize: 14, flex: 1, marginRight: 8 },
   mapContainer: { height: 200, borderRadius: 12, overflow: "hidden", marginBottom: 14, position: "relative" },
   map: { flex: 1 },
-  mapPlaceholder: { height: 120, backgroundColor: "rgba(0,0,0,0.3)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  mapPlaceholder: { height: 120, backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   mapPlaceholderText: { color: COLORS.grayDim, fontSize: 13 },
   mapHint: { position: "absolute", bottom: 10, left: 0, right: 0, alignItems: "center" },
   mapHintBubble: { backgroundColor: "rgba(0,0,0,0.7)", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
   mapHintText: { color: "#fff", fontSize: 11, fontWeight: "600" },
   dateRow: { flexDirection: "row" },
-  radioItem: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: "rgba(0,0,0,0.3)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 10, marginBottom: 8 },
+  radioItem: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 10, marginBottom: 8 },
   radioItemActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
-  radioCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: "#555", alignItems: "center", justifyContent: "center" },
+  radioCircle: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.grayDim, alignItems: "center", justifyContent: "center" },
   radioCircleActive: { borderColor: COLORS.red },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
-  radioName: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+  radioName: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
   radioTag: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
   recommendedBadge: { backgroundColor: "rgba(232,25,44,0.15)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   recommendedText: { color: COLORS.red, fontSize: 10, fontWeight: "700" },
   staffRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
-  staffBtn: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 10, padding: 12, alignItems: "center" },
+  staffBtn: { flex: 1, backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 10, padding: 12, alignItems: "center" },
   staffBtnActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
   staffText: { color: COLORS.grayDim, fontSize: 13, fontWeight: "600" },
   equipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  equipItem: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(0,0,0,0.3)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 10, padding: 10, width: "48%" },
+  equipItem: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 10, padding: 10, width: "48%" },
   equipItemActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
-  checkbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: "#555", alignItems: "center", justifyContent: "center" },
+  checkbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: COLORS.grayDim, alignItems: "center", justifyContent: "center" },
   checkboxActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   equipText: { color: COLORS.grayDim, fontSize: 11, flex: 1 },
-  pricingBox: { backgroundColor: "rgba(7,20,34,0.9)", borderWidth: 0.5, borderColor: "rgba(13,42,66,0.8)", borderRadius: 14, padding: 14, marginBottom: 16 },
-  pricingTitle: { color: "#4a9eff", fontSize: 13, fontWeight: "600", marginBottom: 6 },
-  pricingBody: { color: "#5a8ab0", fontSize: 12, lineHeight: 18 },
+  pricingBox: { backgroundColor: "rgba(59,130,246,0.07)", borderWidth: 0.5, borderColor: "rgba(59,130,246,0.25)", borderRadius: 14, padding: 14, marginBottom: 16 },
+  pricingTitle: { color: "#2563eb", fontSize: 13, fontWeight: "600", marginBottom: 6 },
+  pricingBody: { color: "#3b82f6", fontSize: 12, lineHeight: 18 },
   submitBtn: { backgroundColor: COLORS.red, borderRadius: 14, padding: 17, alignItems: "center", marginBottom: 10 },
   submitText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   submitNote: { textAlign: "center", color: COLORS.grayDim, fontSize: 11, marginBottom: 10 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
-  modalSheet: { backgroundColor: "#141414", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
-  modalTitle: { color: COLORS.white, fontSize: 16, fontWeight: "700", marginBottom: 16 },
-  modalItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.06)" },
+  modalSheet: { backgroundColor: COLORS.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+  modalTitle: { color: COLORS.text, fontSize: 16, fontWeight: "700", marginBottom: 16 },
+  modalItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.06)" },
   modalItemActive: {},
   modalItemText: { color: COLORS.gray, fontSize: 14 },
 });
@@ -385,17 +385,17 @@ const styles = StyleSheet.create({
 const srch = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 54 },
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 16 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  closeText: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
-  title: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 18, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12 },
-  input: { flex: 1, color: COLORS.white, fontSize: 15 },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  closeText: { color: COLORS.text, fontSize: 14, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 18, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 12 },
+  input: { flex: 1, color: COLORS.text, fontSize: 15 },
   clearBtn: { color: COLORS.grayDim, fontSize: 14, paddingHorizontal: 4 },
-  gpsRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" },
-  gpsTitle: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  gpsRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)" },
+  gpsTitle: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   gpsSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
-  suggRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.04)" },
-  suggMain: { color: COLORS.white, fontSize: 14, fontWeight: "500" },
+  suggRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.04)" },
+  suggMain: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
   suggSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
 });
 

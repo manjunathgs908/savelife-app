@@ -12,7 +12,7 @@ export default function SplashScreen({ navigation }) {
     <View style={styles.container}>
       <Text style={styles.logo}>
         <Text style={{ color: COLORS.red }}>Save</Text>
-        <Text style={{ color: COLORS.white }}>Life</Text>
+        <Text style={{ color: COLORS.text }}>Life</Text>
       </Text>
       <View style={styles.pulse}>
         <Text style={{ fontSize: 52 }}>🚑</Text>

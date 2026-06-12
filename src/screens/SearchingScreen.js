@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, alignItems: "center", justifyContent: "center" },
   spinnerBox: { width: 110, height: 110, alignItems: "center", justifyContent: "center", marginBottom: 24 },
   ring: { position: "absolute", width: 110, height: 110, borderRadius: 55, borderWidth: 3, borderColor: "transparent", borderTopColor: COLORS.red, borderRightColor: COLORS.red },
-  title: { color: COLORS.white, fontSize: 18, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 18, fontWeight: "700" },
   sub: { color: COLORS.grayDim, fontSize: 12, marginTop: 8 },
   loc: { color: COLORS.red, fontSize: 13, marginTop: 12, fontWeight: "600" },
 });

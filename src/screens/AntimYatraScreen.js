@@ -92,7 +92,7 @@ export default function AntimYatraScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>Antim Yatra</Text>
@@ -104,7 +104,7 @@ export default function AntimYatraScreen({ navigation }) {
       <View style={styles.dots}>
         {STEPS.map((_, i) => (
           <View key={i} style={[styles.dot, {
-            backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)",
+            backgroundColor: i < step ? COLORS.red : "rgba(0,0,0,0.12)",
             width: i === step - 1 ? 28 : 8,
           }]} />
         ))}
@@ -253,7 +253,7 @@ export default function AntimYatraScreen({ navigation }) {
                 <Switch
                   value={flowerDecor}
                   onValueChange={setFlowerDecor}
-                  trackColor={{ false: "rgba(255,255,255,0.1)", true: COLORS.red }}
+                  trackColor={{ false: "rgba(0,0,0,0.1)", true: COLORS.red }}
                   thumbColor={COLORS.white}
                 />
               </View>
@@ -269,7 +269,7 @@ export default function AntimYatraScreen({ navigation }) {
                 <Switch
                   value={priestArrange}
                   onValueChange={setPriestArrange}
-                  trackColor={{ false: "rgba(255,255,255,0.1)", true: COLORS.red }}
+                  trackColor={{ false: "rgba(0,0,0,0.1)", true: COLORS.red }}
                   thumbColor={COLORS.white}
                 />
               </View>
@@ -285,7 +285,7 @@ export default function AntimYatraScreen({ navigation }) {
                 <Switch
                   value={iceBox}
                   onValueChange={setIceBox}
-                  trackColor={{ false: "rgba(255,255,255,0.1)", true: COLORS.red }}
+                  trackColor={{ false: "rgba(0,0,0,0.1)", true: COLORS.red }}
                   thumbColor={COLORS.white}
                 />
               </View>
@@ -386,8 +386,8 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
   // Progress dots
@@ -397,73 +397,73 @@ const styles = StyleSheet.create({
   // Summary fare bar
   fareBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 18, marginBottom: 8, padding: 14, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 1, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14 },
   fareLbl: { color: COLORS.gray, fontSize: 11, marginBottom: 2 },
-  fareAmt: { color: COLORS.white, fontSize: 22, fontWeight: "800" },
+  fareAmt: { color: COLORS.text, fontSize: 22, fontWeight: "800" },
   fareTag: { backgroundColor: "rgba(232,25,44,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
 
   // Step headings
-  q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
+  q: { color: COLORS.text, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
 
   // Form fields
   fieldLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
-  input: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.white, marginBottom: 4 },
+  input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.text, marginBottom: 4 },
 
   // Date chips
   dateChipScroll: { marginTop: 4, marginBottom: 4 },
-  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)" },
+  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)" },
   dateChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   dateChipDay: { color: COLORS.grayDim, fontSize: 8, fontWeight: "700", letterSpacing: 0.3, marginBottom: 2 },
-  dateChipNum: { color: COLORS.white, fontSize: 17, fontWeight: "800", lineHeight: 20 },
+  dateChipNum: { color: COLORS.text, fontSize: 17, fontWeight: "800", lineHeight: 20 },
   dateChipMon: { color: COLORS.grayDim, fontSize: 8, marginTop: 2 },
 
   // Vehicle option cards
-  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
+  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },
   optActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
-  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-  optName: { color: COLORS.white, fontWeight: "600", fontSize: 15 },
+  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" },
+  optName: { color: COLORS.text, fontWeight: "600", fontSize: 15 },
   optDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
   optPrice: { color: COLORS.grayDim, fontSize: 15, fontWeight: "700" },
   optPriceActive: { color: COLORS.red },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
   radioActive: { borderColor: COLORS.red },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
 
   // Religion chips
   sectionTitle: { color: COLORS.grayDim, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 },
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
   chipActive: { backgroundColor: "rgba(232,25,44,0.15)", borderColor: "rgba(232,25,44,0.5)" },
   chipText: { color: COLORS.grayDim, fontSize: 13 },
   chipTextActive: { color: COLORS.red, fontWeight: "600" },
 
   // Additional services card
-  serviceCard: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 14, padding: 16 },
+  serviceCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 16 },
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
   switchIcon: { fontSize: 20 },
-  switchLabel: { color: COLORS.white, fontSize: 14, fontWeight: "600", marginBottom: 2 },
+  switchLabel: { color: COLORS.text, fontSize: 14, fontWeight: "600", marginBottom: 2 },
   switchDesc: { color: COLORS.grayDim, fontSize: 12, lineHeight: 17, paddingRight: 8 },
-  divider: { height: 0.5, backgroundColor: "rgba(255,255,255,0.07)", marginVertical: 14 },
+  divider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.07)", marginVertical: 14 },
 
   // Review cards
-  reviewCard: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 10 },
+  reviewCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 16, marginBottom: 10 },
   reviewCardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   reviewCardIcon: { fontSize: 18 },
-  reviewCardTitle: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  reviewCardTitle: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   sumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   sumLabel: { color: COLORS.grayDim, fontSize: 12, flex: 0.35 },
-  sumValue: { color: COLORS.white, fontSize: 12, fontWeight: "500", flex: 0.65, textAlign: "right" },
+  sumValue: { color: COLORS.text, fontSize: 12, fontWeight: "500", flex: 0.65, textAlign: "right" },
 
   // Price card
-  priceCard: { backgroundColor: "rgba(7,20,34,0.95)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 16, padding: 18, marginBottom: 8 },
-  priceCardTitle: { color: "#93c5fd", fontSize: 13, fontWeight: "700", marginBottom: 14 },
+  priceCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 16, padding: 18, marginBottom: 8 },
+  priceCardTitle: { color: "#2563eb", fontSize: 13, fontWeight: "700", marginBottom: 14 },
   priceRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
   priceRowLabel: { color: COLORS.grayDim, fontSize: 13 },
-  priceRowValue: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
-  priceDivider: { height: 0.5, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 10 },
-  priceTotalLabel: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
+  priceRowValue: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
+  priceDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.1)", marginVertical: 10 },
+  priceTotalLabel: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
   priceTotalValue: { color: COLORS.red, fontSize: 24, fontWeight: "800" },
-  priceNote: { color: "rgba(147,197,253,0.7)", fontSize: 11, lineHeight: 17, marginTop: 10 },
+  priceNote: { color: "#3b82f6", fontSize: 11, lineHeight: 17, marginTop: 10 },
 
   // Footer
   footer: { padding: 18 },

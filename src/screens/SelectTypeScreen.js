@@ -9,7 +9,7 @@ export default function SelectTypeScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Select Ambulance</Text>
       </View>
@@ -27,7 +27,7 @@ export default function SelectTypeScreen({ navigation }) {
               <Text style={styles.name}>{a.name}</Text>
               <Text style={styles.desc}>{a.desc}</Text>
             </View>
-            <View style={[styles.radio, { borderColor: selected === a.id ? COLORS.red : "rgba(255,255,255,0.3)" }]}>
+            <View style={[styles.radio, { borderColor: selected === a.id ? COLORS.red : "rgba(0,0,0,0.3)" }]}>
               {selected === a.id && <View style={styles.radioDot} />}
             </View>
           </TouchableOpacity>
@@ -51,11 +51,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
   back: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   hint: { color: COLORS.grayDim, fontSize: 13, paddingHorizontal: 22, paddingVertical: 14 },
   card: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, borderRadius: 16, borderWidth: 1, marginBottom: 11 },
   iconBox: { width: 50, height: 50, borderRadius: 13, backgroundColor: "rgba(232,25,44,0.1)", alignItems: "center", justifyContent: "center" },
-  name: { color: COLORS.white, fontWeight: "700", fontSize: 15 },
+  name: { color: COLORS.text, fontWeight: "700", fontSize: 15 },
   desc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },

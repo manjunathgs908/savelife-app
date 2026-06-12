@@ -109,7 +109,7 @@ export default function StandbyScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>Standby Ambulance</Text>
@@ -121,7 +121,7 @@ export default function StandbyScreen({ navigation }) {
       <View style={styles.dots}>
         {STEPS.map((_, i) => (
           <View key={i} style={[styles.dot, {
-            backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)",
+            backgroundColor: i < step ? COLORS.red : "rgba(0,0,0,0.12)",
             width: i === step - 1 ? 28 : 8,
           }]} />
         ))}
@@ -380,8 +380,8 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
   // Progress dots
@@ -391,57 +391,57 @@ const styles = StyleSheet.create({
   // Summary bar
   fareBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 18, marginBottom: 8, padding: 14, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 1, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14 },
   fareLbl: { color: COLORS.gray, fontSize: 11, marginBottom: 2 },
-  fareAmt: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  fareAmt: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
   fareTag: { backgroundColor: "rgba(232,25,44,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 0.8 },
 
   // Step headings
-  q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
+  q: { color: COLORS.text, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
 
   // Form fields
   fieldLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
-  input: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.white, marginBottom: 4 },
+  input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.text, marginBottom: 4 },
   inputMulti: { height: 80, textAlignVertical: "top" },
 
   // Org type chips
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  chip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" },
+  chip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
   chipActive: { backgroundColor: "rgba(232,25,44,0.15)", borderColor: "rgba(232,25,44,0.5)" },
   chipText: { color: COLORS.grayDim, fontSize: 13 },
   chipTextActive: { color: COLORS.red, fontWeight: "600" },
 
   // Ambulance option cards
-  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
+  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },
   optActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
-  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-  optName: { color: COLORS.white, fontWeight: "700", fontSize: 14, marginBottom: 2 },
+  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" },
+  optName: { color: COLORS.text, fontWeight: "700", fontSize: 14, marginBottom: 2 },
   optTag: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", marginBottom: 3 },
   optTagActive: { color: COLORS.red },
   optDesc: { color: COLORS.grayDim, fontSize: 11, lineHeight: 16 },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
   radioActive: { borderColor: COLORS.red },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
 
   // Contract pills
   sectionLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10, marginTop: 16 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" },
+  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
   pillActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   pillText: { color: COLORS.grayDim, fontSize: 13 },
   pillTextActive: { color: COLORS.white, fontWeight: "700" },
-  countPill: { width: 56, alignItems: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" },
+  countPill: { width: 56, alignItems: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
   selectionSummary: { marginTop: 16, padding: 12, backgroundColor: "rgba(232,25,44,0.08)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 10 },
   selectionSummaryText: { color: COLORS.red, fontSize: 13, fontWeight: "600", textAlign: "center" },
 
   // Review cards
-  reviewCard: { backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 10 },
+  reviewCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 16, marginBottom: 10 },
   reviewCardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   reviewCardIcon: { fontSize: 18 },
-  reviewCardTitle: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  reviewCardTitle: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   sumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   sumLabel: { color: COLORS.grayDim, fontSize: 12, flex: 0.32 },
-  sumValue: { color: COLORS.white, fontSize: 12, fontWeight: "500", flex: 0.68, textAlign: "right" },
+  sumValue: { color: COLORS.text, fontSize: 12, fontWeight: "500", flex: 0.68, textAlign: "right" },
 
   // Pricing info
   pricingBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "rgba(59,130,246,0.07)", borderWidth: 0.5, borderColor: "rgba(59,130,246,0.25)", borderRadius: 12, padding: 14 },

@@ -19,7 +19,7 @@ export default function OtpScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+        <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
       </TouchableOpacity>
       <View style={styles.center}>
         <Text style={styles.title}>Verify OTP</Text>
@@ -57,10 +57,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, padding: 28, paddingTop: 60 },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
   center: { flex: 1, justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 30, fontWeight: "800", marginBottom: 8 },
+  title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginBottom: 8 },
   sub: { color: COLORS.gray, fontSize: 14, lineHeight: 22, marginBottom: 32 },
   otpRow: { flexDirection: "row", gap: 12, marginBottom: 28, justifyContent: "center" },
-  box: { width: 56, height: 64, backgroundColor: COLORS.bg3, borderWidth: 2, borderRadius: 14, textAlign: "center", color: COLORS.white, fontSize: 26, fontWeight: "700" },
+  box: { width: 56, height: 64, backgroundColor: COLORS.bg3, borderWidth: 2, borderRadius: 14, textAlign: "center", color: COLORS.text, fontSize: 26, fontWeight: "700" },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
   resend: { color: COLORS.grayDim, fontSize: 13, textAlign: "center", marginTop: 18 },

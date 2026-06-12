@@ -34,7 +34,7 @@ function fmtDateTime(iso) {
 function FareRow({ label, value, bold }) {
   return (
     <View style={styles.fareRow}>
-      <Text style={[styles.fareLabel, bold && { color: COLORS.white, fontWeight: "700", fontSize: 15 }]}>
+      <Text style={[styles.fareLabel, bold && { color: COLORS.text, fontWeight: "700", fontSize: 15 }]}>
         {label}
       </Text>
       <Text style={[styles.fareValue, bold && { color: COLORS.red, fontWeight: "800", fontSize: 16 }]}>
@@ -78,7 +78,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   async function handleConfirm() {
     try {
-      const response = await fetch("https://medifleet-backend.onrender.com/api/trips", {
+      const response = await fetch("https://api.savelife.health/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -287,15 +287,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center", gap: 14,
     paddingHorizontal: 18, paddingBottom: 14,
-    borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)",
+    borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)",
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.06)",
     alignItems: "center", justifyContent: "center",
   },
-  backArrow: { color: COLORS.white, fontSize: 20 },
-  headerTitle: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  backArrow: { color: COLORS.text, fontSize: 20 },
+  headerTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   headerSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 1 },
 
   scrollContent: { padding: 18, gap: 12 },
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(232,25,44,0.15)",
     alignItems: "center", justifyContent: "center",
   },
-  ambName: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
+  ambName: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
   ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
   ambRate: {
     backgroundColor: COLORS.red, borderRadius: 10,
@@ -322,17 +322,17 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 16, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 16, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
     padding: 16,
   },
   cardHeader: {
     flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14,
   },
   cardIco: { fontSize: 18 },
-  cardTitle: { flex: 1, color: COLORS.white, fontSize: 15, fontWeight: "600" },
+  cardTitle: { flex: 1, color: COLORS.text, fontSize: 15, fontWeight: "600" },
   distBadge: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.08)",
     borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4,
   },
   distBadgeTxt: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   },
   routeConnector: {
     flex: 1, width: 2,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(0,0,0,0.1)",
     marginVertical: 3, marginBottom: 6,
     minHeight: 20,
   },
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     color: COLORS.grayDim, fontSize: 10, fontWeight: "700",
     letterSpacing: 0.5, marginBottom: 3,
   },
-  routeAddr: { color: COLORS.white, fontSize: 13, fontWeight: "500", lineHeight: 18 },
+  routeAddr: { color: COLORS.text, fontSize: 13, fontWeight: "500", lineHeight: 18 },
 
   // Schedule badges
   nowBadge: {
@@ -383,30 +383,30 @@ const styles = StyleSheet.create({
   },
   laterIco: { fontSize: 24 },
   laterLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", marginBottom: 3 },
-  laterDate: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+  laterDate: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
 
   // Add-ons
   optionalTag: {
     color: COLORS.grayDim, fontSize: 11, fontWeight: "600",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.06)",
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
   },
   addonRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
     padding: 12, borderRadius: 12, marginBottom: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(0,0,0,0.03)",
+    borderWidth: 1, borderColor: "rgba(0,0,0,0.07)",
   },
   addonRowActive: {
     backgroundColor: "rgba(232,25,44,0.08)",
     borderColor: "rgba(232,25,44,0.4)",
   },
   addonIco: { fontSize: 24 },
-  addonName: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  addonName: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   addonPrice: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   checkbox: {
     width: 24, height: 24, borderRadius: 7,
-    borderWidth: 2, borderColor: "rgba(255,255,255,0.3)",
+    borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
     alignItems: "center", justifyContent: "center",
   },
   checkboxActive: {
@@ -423,13 +423,13 @@ const styles = StyleSheet.create({
   fareValue: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
   fareDivider: {
     height: 0.5,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.08)",
     marginVertical: 6,
   },
   fareNote: {
     flexDirection: "row", alignItems: "flex-start", gap: 8,
     marginTop: 10, padding: 10,
-    backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 10,
   },
   fareNoteIco: { fontSize: 14, marginTop: 1 },
   fareNoteTxt: { flex: 1, color: COLORS.grayDim, fontSize: 11, lineHeight: 16 },
@@ -449,12 +449,12 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 18, paddingVertical: 14,
-    borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)",
+    borderTopWidth: 0.5, borderTopColor: "rgba(0,0,0,0.08)",
     backgroundColor: COLORS.bg, gap: 14,
   },
   footerPriceCol: { flex: 1 },
   footerPriceLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
-  footerPrice: { color: COLORS.white, fontSize: 22, fontWeight: "800", marginTop: 2 },
+  footerPrice: { color: COLORS.text, fontSize: 22, fontWeight: "800", marginTop: 2 },
   confirmBtn: {
     flex: 2, flexDirection: "row",
     backgroundColor: COLORS.red, borderRadius: 14,

@@ -3,10 +3,13 @@ import {
   View, Text, TouchableOpacity, ScrollView, TextInput,
   StyleSheet, Alert, ActivityIndicator, Modal, Animated,
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Location from "expo-location";
 import { COLORS } from "../theme";
+import storage from "../utils/storage";
 
-const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY";
+// Unrestricted key — for HTTP API calls (Places, Geocoding)
+const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 const PROFILE_DEFAULTS = { name: "Manjunath", phone: "+91 90088 65545" };
 
 const BOX_TYPES = [
@@ -70,9 +73,8 @@ const STEPS = ["boxtype", "datetime", "duration", "location", "floor"];
 
 async function loadUserProfile() {
   try {
-    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
-    const name  = await AsyncStorage.getItem("user_name");
-    const phone = await AsyncStorage.getItem("user_phone");
+    const name  = await storage.getItem("user_name");
+    const phone = await storage.getItem("user_phone");
     return { name: name || PROFILE_DEFAULTS.name, phone: phone || PROFILE_DEFAULTS.phone };
   } catch {
     return PROFILE_DEFAULTS;
@@ -82,7 +84,7 @@ async function loadUserProfile() {
 async function reverseGeocode(lat, lng) {
   try {
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_KEY}`
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`
     );
     const data = await res.json();
     if (data.results?.length) return data.results[0].formatted_address;
@@ -147,6 +149,7 @@ export default function FreezerBoxScreen({ navigation }) {
   const [areaVip, setAreaVip]                 = useState(false);
   const [locationConfirmed, setLocationConfirmed] = useState(false);
   const [geocoding, setGeocoding]             = useState(false);
+  const [gpsReady, setGpsReady]               = useState(false);
 
   const [floor, setFloor]           = useState(null);
   const [userProfile, setUserProfile] = useState(PROFILE_DEFAULTS);
@@ -166,6 +169,27 @@ export default function FreezerBoxScreen({ navigation }) {
   const debounceRef = useRef(null);
 
   useEffect(() => { loadUserProfile().then(setUserProfile); }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") { setGpsReady(true); return; }
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setMarkerCoord(coord);
+        mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
+      } catch {
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) {
+          const coord = { latitude: last.coords.latitude, longitude: last.coords.longitude };
+          setMarkerCoord(coord);
+          mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
+        }
+      }
+      setGpsReady(true);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!showOverlay) return;
@@ -229,7 +253,7 @@ export default function FreezerBoxScreen({ navigation }) {
       try {
         const res = await fetch(
           `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${GOOGLE_MAPS_KEY}&language=en&components=country:in`
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in`
         );
         const data = await res.json();
         setSuggestions(data.predictions || []);
@@ -244,7 +268,7 @@ export default function FreezerBoxScreen({ navigation }) {
     try {
       const res = await fetch(
         `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${prediction.place_id}&fields=geometry&key=${GOOGLE_MAPS_KEY}`
+        `?place_id=${prediction.place_id}&fields=geometry&key=${PLACES_KEY}`
       );
       const data = await res.json();
       if (data.result?.geometry) {
@@ -333,7 +357,7 @@ export default function FreezerBoxScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>Freezer Box</Text>
@@ -345,7 +369,7 @@ export default function FreezerBoxScreen({ navigation }) {
       <View style={styles.dots}>
         {STEPS.map((_, i) => (
           <View key={i} style={[styles.dot, {
-            backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)",
+            backgroundColor: i < step ? COLORS.red : "rgba(0,0,0,0.12)",
             width: i === step - 1 ? 28 : 8,
           }]} />
         ))}
@@ -795,8 +819,8 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
   // Progress dots
@@ -806,22 +830,22 @@ const styles = StyleSheet.create({
   // Summary fare bar
   fareBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 18, marginBottom: 8, padding: 14, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 1, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14 },
   fareLbl: { color: COLORS.gray, fontSize: 11, marginBottom: 2 },
-  fareAmt: { color: COLORS.white, fontSize: 22, fontWeight: "800" },
+  fareAmt: { color: COLORS.text, fontSize: 22, fontWeight: "800" },
   fareAmtDim: { color: COLORS.grayDim, fontSize: 12 },
   fareTag: { backgroundColor: "rgba(232,25,44,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
 
   // Step headings
-  q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
+  q: { color: COLORS.text, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
 
   // Option card
-  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", marginBottom: 10 },
+  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },
   optActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
-  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-  optName: { color: COLORS.white, fontWeight: "600", fontSize: 15 },
+  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" },
+  optName: { color: COLORS.text, fontWeight: "600", fontSize: 15 },
   optDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
   radioActive: { borderColor: COLORS.red },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
   freeTag: { color: COLORS.green, fontSize: 12, fontWeight: "700", marginRight: 8 },
@@ -832,52 +856,52 @@ const styles = StyleSheet.create({
 
   // Date & Time step — compact
   dateChipScroll: { marginBottom: 10 },
-  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)" },
+  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)" },
   dateChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   dateChipDay: { color: COLORS.grayDim, fontSize: 8, fontWeight: "700", letterSpacing: 0.3, marginBottom: 2 },
-  dateChipNum: { color: COLORS.white, fontSize: 17, fontWeight: "800", lineHeight: 20 },
+  dateChipNum: { color: COLORS.text, fontSize: 17, fontWeight: "800", lineHeight: 20 },
   dateChipMon: { color: COLORS.grayDim, fontSize: 8, marginTop: 2 },
-  timeDivider: { height: 0.5, backgroundColor: "rgba(255,255,255,0.08)", marginTop: 6, marginBottom: 16 },
+  timeDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.08)", marginTop: 6, marginBottom: 16 },
   dtLabel: { color: COLORS.grayDim, fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 },
 
   // AM/PM toggle
   ampmRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
-  ampmBtn: { flex: 1, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10 },
+  ampmBtn: { flex: 1, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10 },
   ampmBtnSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   ampmBtnPast: { opacity: 0.22 },
   ampmText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700", letterSpacing: 1.5 },
 
   // Hour grid 4×3
   hourGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 14 },
-  hourChip: { width: "23%", height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10 },
+  hourChip: { width: "23%", height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10 },
   hourChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   hourChipPast: { opacity: 0.22 },
-  hourChipText: { color: COLORS.white, fontSize: 16, fontWeight: "600" },
+  hourChipText: { color: COLORS.text, fontSize: 16, fontWeight: "600" },
   hourChipTextSel: { color: COLORS.white, fontWeight: "800" },
 
   // Minute chips
   minRow: { flexDirection: "row", gap: 6, marginBottom: 10 },
-  minChip: { flex: 1, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 10 },
+  minChip: { flex: 1, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10 },
   minChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   minChipPast: { opacity: 0.22 },
-  minChipText: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  minChipText: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
 
   // Info boxes
   infoBoxGreen: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, padding: 9, backgroundColor: "rgba(34,197,94,0.08)", borderWidth: 0.5, borderColor: "rgba(34,197,94,0.3)", borderRadius: 10 },
   infoBoxBlue: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, padding: 9, backgroundColor: "rgba(59,130,246,0.08)", borderWidth: 0.5, borderColor: "rgba(59,130,246,0.3)", borderRadius: 10 },
   infoBoxIcon: { fontSize: 13 },
   infoBoxTextGreen: { color: COLORS.green, fontSize: 11, fontWeight: "600", flex: 1 },
-  infoBoxTextBlue: { color: "#60a5fa", fontSize: 11, fontWeight: "600", flex: 1 },
+  infoBoxTextBlue: { color: "#2563eb", fontSize: 11, fontWeight: "600", flex: 1 },
 
   // Search bar
-  searchBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6 },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 1, borderColor: "rgba(0,0,0,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6 },
   searchIcon: { fontSize: 15 },
-  searchInput: { flex: 1, color: COLORS.white, fontSize: 14 },
+  searchInput: { flex: 1, color: COLORS.text, fontSize: 14 },
   searchClear: { color: COLORS.grayDim, fontSize: 13, paddingHorizontal: 4 },
-  suggestionsBox: { backgroundColor: "rgba(13,16,24,0.98)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", borderRadius: 12, marginBottom: 10, overflow: "hidden" },
-  suggRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
+  suggestionsBox: { backgroundColor: COLORS.bg2, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", borderRadius: 12, marginBottom: 10, overflow: "hidden" },
+  suggRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   suggIcon: { fontSize: 15 },
-  suggMain: { color: COLORS.white, fontSize: 13, fontWeight: "500" },
+  suggMain: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
   suggSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
   // Map with fixed center pin
@@ -889,28 +913,28 @@ const styles = StyleSheet.create({
   pinTail: { width: 3, height: 12, backgroundColor: COLORS.red, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
   confirmBtn: { backgroundColor: COLORS.red, borderRadius: 12, padding: 14, alignItems: "center", marginBottom: 12 },
   confirmBtnText: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
-  addressCard: { backgroundColor: "rgba(0,0,0,0.4)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)", borderRadius: 12, padding: 14 },
+  addressCard: { backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 12, padding: 14 },
   addressRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   addressIcon: { color: COLORS.green, fontSize: 16, fontWeight: "700", marginTop: 1 },
-  addressText: { color: COLORS.white, fontSize: 12, flex: 1, lineHeight: 18 },
+  addressText: { color: COLORS.text, fontSize: 12, flex: 1, lineHeight: 18 },
 
   // User card
-  userCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 14, padding: 14, marginTop: 16, marginBottom: 14 },
+  userCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 14, marginTop: 16, marginBottom: 14 },
   userAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
   userAvatarText: { color: COLORS.white, fontSize: 18, fontWeight: "800" },
   userCardLabel: { color: COLORS.grayDim, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
-  userCardName: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
+  userCardName: { color: COLORS.text, fontSize: 14, fontWeight: "700" },
   userCardPhone: { color: COLORS.grayDim, fontSize: 12, marginTop: 1 },
 
   // Bill
-  billCard: { backgroundColor: "rgba(7,20,34,0.95)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 16, padding: 18, marginBottom: 8 },
-  billTitle: { color: COLORS.white, fontSize: 15, fontWeight: "700", marginBottom: 14 },
+  billCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 16, padding: 18, marginBottom: 8 },
+  billTitle: { color: COLORS.text, fontSize: 15, fontWeight: "700", marginBottom: 14 },
   billRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   billLabel: { color: COLORS.grayDim, fontSize: 13 },
-  billValue: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
-  billDivider: { height: 0.5, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 10 },
+  billValue: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
+  billDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.1)", marginVertical: 10 },
   billTotalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  billTotalLabel: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
+  billTotalLabel: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
   billTotal: { color: COLORS.red, fontSize: 24, fontWeight: "800" },
 
   // Footer

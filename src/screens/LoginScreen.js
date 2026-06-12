@@ -10,7 +10,7 @@ export default function LoginScreen({ navigation }) {
     <View style={styles.container}>
       <Text style={styles.logo}>
         <Text style={{ color: COLORS.red }}>Save</Text>
-        <Text style={{ color: COLORS.white }}>Life</Text>
+        <Text style={{ color: COLORS.text }}>Life</Text>
       </Text>
       <View style={styles.center}>
         <Text style={styles.icon}>🚑</Text>
@@ -49,12 +49,12 @@ const styles = StyleSheet.create({
   logo: { fontSize: 22, fontWeight: "800" },
   center: { flex: 1, justifyContent: "center" },
   icon: { fontSize: 52, marginBottom: 20 },
-  title: { color: COLORS.white, fontSize: 30, fontWeight: "800", marginBottom: 8 },
+  title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginBottom: 8 },
   sub: { color: COLORS.gray, fontSize: 14, lineHeight: 22, marginBottom: 32 },
   phoneRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
   cc: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
-  ccText: { color: COLORS.white, fontWeight: "600", fontSize: 16 },
-  input: { flex: 1, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 16, color: COLORS.white, fontSize: 16 },
+  ccText: { color: COLORS.text, fontWeight: "600", fontSize: 16 },
+  input: { flex: 1, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 16, color: COLORS.text, fontSize: 16 },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
   terms: { color: COLORS.grayDim, fontSize: 11, textAlign: "center", marginTop: 20, lineHeight: 16 },

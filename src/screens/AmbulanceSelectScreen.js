@@ -238,22 +238,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center", gap: 14,
     paddingHorizontal: 18, paddingBottom: 14,
-    borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)",
+    borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)",
   },
   backBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.06)",
     alignItems: "center", justifyContent: "center",
   },
-  backArrow: { color: COLORS.white, fontSize: 20 },
-  headerTitle: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  backArrow: { color: COLORS.text, fontSize: 20 },
+  headerTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   headerSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 1 },
 
   // Route bar
   routeBar: {
     marginHorizontal: 18, marginVertical: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
     paddingHorizontal: 14, paddingVertical: 12, gap: 8,
   },
   routeEndpoint: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -265,11 +265,11 @@ const styles = StyleSheet.create({
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: COLORS.red,
   },
-  routeAddr: { flex: 1, color: COLORS.white, fontSize: 12, fontWeight: "500" },
+  routeAddr: { flex: 1, color: COLORS.text, fontSize: 12, fontWeight: "500" },
   routeMid: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 4 },
-  routeLine: { flex: 1, height: 0.5, backgroundColor: "rgba(255,255,255,0.15)" },
+  routeLine: { flex: 1, height: 0.5, backgroundColor: "rgba(0,0,0,0.15)" },
   routeDistPill: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.08)",
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100,
   },
   routeDistTxt: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
@@ -290,8 +290,8 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 16, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 16, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
     marginBottom: 10, padding: 14, overflow: "hidden",
   },
   cardActive: {
@@ -308,24 +308,24 @@ const styles = StyleSheet.create({
   cardMain: { flexDirection: "row", alignItems: "center", gap: 12 },
   iconBox: {
     width: 54, height: 54, borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(0,0,0,0.05)",
     alignItems: "center", justifyContent: "center",
   },
   cardInfo: { flex: 1 },
-  ambName: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  ambName: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
   ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 7 },
   metaChip: {
     color: COLORS.grayDim, fontSize: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.06)",
     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
   },
   priceCol: { alignItems: "flex-end", gap: 4 },
-  priceTotal: { color: COLORS.white, fontSize: 16, fontWeight: "800" },
+  priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
   priceEst: { color: COLORS.grayDim, fontSize: 10 },
   radio: {
     width: 20, height: 20, borderRadius: 10,
-    borderWidth: 2, borderColor: "rgba(255,255,255,0.3)",
+    borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
     alignItems: "center", justifyContent: "center",
     marginTop: 4,
   },
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4,
   },
   featureCheck: { color: COLORS.green, fontSize: 13, fontWeight: "700", width: 16 },
-  featureTxt: { color: COLORS.white, fontSize: 13 },
+  featureTxt: { color: COLORS.text, fontSize: 13 },
 
   // Pricing note
   noteBox: {
@@ -365,12 +365,12 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 18, paddingVertical: 14,
-    borderTopWidth: 0.5, borderTopColor: "rgba(255,255,255,0.08)",
+    borderTopWidth: 0.5, borderTopColor: "rgba(0,0,0,0.08)",
     backgroundColor: COLORS.bg, gap: 14,
   },
   footerLeft: { flex: 1 },
   footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
-  footerPrice: { color: COLORS.white, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  footerPrice: { color: COLORS.text, fontSize: 20, fontWeight: "800", marginTop: 2 },
   nextBtn: {
     backgroundColor: COLORS.red,
     borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20,

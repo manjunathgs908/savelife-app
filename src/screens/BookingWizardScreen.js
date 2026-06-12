@@ -295,12 +295,12 @@ export default function BookingWizardScreen({ navigation, route }) {
         {desc ? <Text style={styles.optDesc}>{desc}</Text> : null}
       </View>
       {radio && (
-        <View style={[styles.radio, { borderColor: active ? COLORS.red : "rgba(255,255,255,0.3)" }]}>
+        <View style={[styles.radio, { borderColor: active ? COLORS.red : COLORS.border }]}>
           {active && <View style={styles.radioDot} />}
         </View>
       )}
       {check && (
-        <View style={[styles.checkbox, { backgroundColor: active ? COLORS.red : "transparent", borderColor: active ? COLORS.red : "rgba(255,255,255,0.3)" }]}>
+        <View style={[styles.checkbox, { backgroundColor: active ? COLORS.red : "transparent", borderColor: active ? COLORS.red : COLORS.border }]}>
           {active && <Text style={{ color: "#fff", fontSize: 13 }}>✓</Text>}
         </View>
       )}
@@ -311,7 +311,7 @@ export default function BookingWizardScreen({ navigation, route }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.back} onPress={back}>
-          <Text style={{ color: COLORS.white, fontSize: 20 }}>←</Text>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>{svcName} Ambulance</Text>
@@ -321,7 +321,7 @@ export default function BookingWizardScreen({ navigation, route }) {
 
       <View style={styles.dots}>
         {steps.map((_, i) => (
-          <View key={i} style={[styles.dot, { backgroundColor: i < step ? COLORS.red : "rgba(255,255,255,0.12)", width: i === step - 1 ? 26 : 8 }]} />
+          <View key={i} style={[styles.dot, { backgroundColor: i < step ? COLORS.red : "rgba(0,0,0,0.12)", width: i === step - 1 ? 26 : 8 }]} />
         ))}
       </View>
 
@@ -587,32 +587,32 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
   back: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
-  title: { color: COLORS.white, fontSize: 20, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
   dots: { flexDirection: "row", gap: 6, paddingHorizontal: 18, paddingVertical: 14, alignItems: "center" },
   dot: { height: 8, borderRadius: 4 },
   fareBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 18, marginBottom: 8, padding: 14, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 1, borderColor: "rgba(232,25,44,0.3)", borderRadius: 14 },
   fareLbl: { color: COLORS.gray, fontSize: 11 },
-  fareAmt: { color: COLORS.white, fontSize: 24, fontWeight: "800", marginTop: 2 },
+  fareAmt: { color: COLORS.text, fontSize: 24, fontWeight: "800", marginTop: 2 },
   fareTag: { backgroundColor: "rgba(232,25,44,0.2)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   fareTagText: { color: COLORS.red, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
-  q: { color: COLORS.white, fontSize: 19, fontWeight: "700", marginBottom: 6 },
+  q: { color: COLORS.text, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
 
   // Address bars
   addrBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
   addrDot: { width: 12, height: 12, borderRadius: 6 },
   addrLbl: { color: COLORS.grayDim, fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
-  addrVal: { color: COLORS.white, fontSize: 13, marginTop: 3, fontWeight: "500" },
-  editChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1, borderColor: COLORS.border },
+  addrVal: { color: COLORS.text, fontSize: 13, marginTop: 3, fontWeight: "500" },
+  editChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "rgba(0,0,0,0.06)", borderWidth: 1, borderColor: COLORS.border },
   editChipText: { color: COLORS.gray, fontSize: 11, fontWeight: "600" },
-  connector: { width: 2, height: 16, backgroundColor: "rgba(255,255,255,0.12)", marginLeft: 20, marginVertical: 2 },
+  connector: { width: 2, height: 16, backgroundColor: "rgba(0,0,0,0.12)", marginLeft: 20, marginVertical: 2 },
 
   // Map
   mapContainer: { height: 260, borderRadius: 14, overflow: "hidden", marginTop: 16, marginBottom: 12 },
   map: { flex: 1 },
   mapPlaceholder: { height: 260, backgroundColor: COLORS.bg3, borderRadius: 14, marginTop: 16, marginBottom: 12, alignItems: "center", justifyContent: "center", gap: 10, borderWidth: 1, borderColor: COLORS.border },
-  mapPlaceholderText: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  mapPlaceholderText: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   mapPlaceholderSub: { color: COLORS.grayDim, fontSize: 12 },
   mapHint: { position: "absolute", bottom: 12, left: 0, right: 0, alignItems: "center" },
   mapHintBubble: { backgroundColor: "rgba(0,0,0,0.65)", paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 },
@@ -622,23 +622,23 @@ const styles = StyleSheet.create({
   distText: { color: COLORS.green, fontWeight: "600", fontSize: 13, textAlign: "center" },
 
   opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, borderRadius: 14, borderWidth: 1, marginBottom: 11 },
-  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.05)", alignItems: "center", justifyContent: "center" },
-  optName: { color: COLORS.white, fontWeight: "600", fontSize: 15 },
+  optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", alignItems: "center", justifyContent: "center" },
+  optName: { color: COLORS.text, fontWeight: "600", fontSize: 15 },
   optDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
   checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   reviewCard: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, marginBottom: 14 },
-  revRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.05)" },
+  revRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   revLbl: { color: COLORS.grayDim, fontSize: 13 },
-  revVal: { color: COLORS.white, fontSize: 13, fontWeight: "600" },
+  revVal: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
   breakdown: { backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18 },
   fbRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 7 },
   fbText: { color: COLORS.gray, fontSize: 13 },
-  fbTotal: { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, marginTop: 6, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.1)" },
-  fbTotalText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
+  fbTotal: { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, marginTop: 6, borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.1)" },
+  fbTotalText: { color: COLORS.text, fontSize: 17, fontWeight: "800" },
   footer: { padding: 18, flexDirection: "row", gap: 10 },
-  skip: { paddingHorizontal: 28, paddingVertical: 16, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
+  skip: { paddingHorizontal: 28, paddingVertical: 16, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
   skipText: { color: COLORS.gray, fontSize: 15, fontWeight: "600" },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
@@ -649,17 +649,17 @@ const srch = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 54 },
   header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 16 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
-  closeText: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
-  title: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  closeText: { color: COLORS.text, fontSize: 14, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   inputRow: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 18, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12 },
   searchIcon: { fontSize: 16 },
-  input: { flex: 1, color: COLORS.white, fontSize: 15 },
+  input: { flex: 1, color: COLORS.text, fontSize: 15 },
   clearBtn: { color: COLORS.grayDim, fontSize: 14, paddingHorizontal: 4 },
   gpsRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   itemIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center" },
-  gpsTitle: { color: COLORS.white, fontSize: 14, fontWeight: "600" },
+  gpsTitle: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   gpsSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
-  suggRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.04)" },
-  suggMain: { color: COLORS.white, fontSize: 14, fontWeight: "500" },
+  suggRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
+  suggMain: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
   suggSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
 });

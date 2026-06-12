@@ -48,17 +48,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.07)" },
-  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10 },
-  backArrow: { color: COLORS.white, fontSize: 20 },
-  headerTitle: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.07)" },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.06)", borderRadius: 10 },
+  backArrow: { color: COLORS.text, fontSize: 20 },
+  headerTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
 
   // Center
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
   iconBox: { width: 100, height: 100, borderRadius: 28, backgroundColor: "rgba(232,25,44,0.1)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", alignItems: "center", justifyContent: "center", marginBottom: 24, position: "relative" },
   icon: { fontSize: 46 },
   iconBadge: { position: "absolute", bottom: 8, right: 8, fontSize: 20 },
-  title: { color: COLORS.white, fontSize: 26, fontWeight: "800", marginBottom: 8 },
+  title: { color: COLORS.text, fontSize: 26, fontWeight: "800", marginBottom: 8 },
   subtitle: { color: COLORS.red, fontSize: 14, fontWeight: "700", letterSpacing: 2, textTransform: "uppercase", marginBottom: 20 },
   message: { color: COLORS.grayDim, fontSize: 15, textAlign: "center", lineHeight: 24 },
 

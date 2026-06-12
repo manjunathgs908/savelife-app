@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   },
   handle: {
     width: 38, height: 4, borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.15)",
     alignSelf: "center",
     marginBottom: 14,
   },
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  greetTxt: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  greetTxt: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
   readyBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "rgba(34,197,94,0.12)",
@@ -484,15 +484,15 @@ const styles = StyleSheet.create({
   gridRow: { flexDirection: "row", gap: 8 },
   gridCell: {
     flex: 1,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
     paddingVertical: 12,
     alignItems: "center", justifyContent: "center",
     gap: 6,
   },
   cellIco: { fontSize: 28 },
   cellLbl: {
-    color: "rgba(255,255,255,0.72)", fontSize: 11, fontWeight: "500",
+    color: COLORS.gray, fontSize: 11, fontWeight: "500",
     textAlign: "center", lineHeight: 15,
     paddingHorizontal: 4,
   },

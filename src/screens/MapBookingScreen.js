@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
   },
   sheetHandle: {
     width: 36, height: 4,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.12)",
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 14,
@@ -979,8 +979,8 @@ const styles = StyleSheet.create({
   schedTab: {
     flex: 1, paddingVertical: 10, alignItems: "center",
     borderRadius: 10, borderWidth: 0.5,
-    borderColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(0,0,0,0.1)",
+    backgroundColor: "rgba(0,0,0,0.04)",
   },
   schedTabActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   schedTabTxt: { color: COLORS.grayDim, fontSize: 13, fontWeight: "600" },
@@ -988,12 +988,12 @@ const styles = StyleSheet.create({
   dateTimeRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   dtChip: {
     flex: 1, flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.05)",
     borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12,
-    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.12)",
+    borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)",
   },
   dtChipIco: { fontSize: 14 },
-  dtChipTxt: { color: COLORS.white, fontSize: 12, fontWeight: "600" },
+  dtChipTxt: { color: COLORS.text, fontSize: 12, fontWeight: "600" },
   chooseBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     backgroundColor: COLORS.red, borderRadius: 14,
@@ -1015,8 +1015,8 @@ const srch = StyleSheet.create({
     backgroundColor: COLORS.bg3,
     alignItems: "center", justifyContent: "center",
   },
-  closeX: { color: COLORS.white, fontSize: 18, fontWeight: "700" },
-  title: { color: COLORS.white, fontSize: 17, fontWeight: "700" },
+  closeX: { color: COLORS.text, fontSize: 18, fontWeight: "700" },
+  title: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   inputWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
     marginHorizontal: 18, marginBottom: 8,
@@ -1026,11 +1026,11 @@ const srch = StyleSheet.create({
     borderRadius: 12,
   },
   searchIco: { fontSize: 16 },
-  input: { flex: 1, color: COLORS.white, fontSize: 15 },
+  input: { flex: 1, color: COLORS.text, fontSize: 15 },
   clearX: { color: COLORS.grayDim, fontSize: 14, paddingHorizontal: 4 },
   ico: {
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.05)",
     alignItems: "center", justifyContent: "center",
   },
   row: {
@@ -1038,7 +1038,7 @@ const srch = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 13,
     borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
   },
-  main: { color: COLORS.white, fontSize: 14, fontWeight: "500" },
+  main: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
   sub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
 });
 
@@ -1056,7 +1056,7 @@ const pk = StyleSheet.create({
   },
   handle: {
     width: 36, height: 4,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.12)",
     borderRadius: 2,
     alignSelf: "center",
     marginTop: 10, marginBottom: 6,
@@ -1066,10 +1066,10 @@ const pk = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 12,
     borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
   },
-  title: { flex: 1, color: COLORS.white, fontSize: 16, fontWeight: "700" },
+  title: { flex: 1, color: COLORS.text, fontSize: 16, fontWeight: "700" },
   closeBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.06)",
     alignItems: "center", justifyContent: "center",
   },
   closeX: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700" },
@@ -1077,16 +1077,16 @@ const pk = StyleSheet.create({
   row: {
     flexDirection: "row", alignItems: "center", gap: 14,
     paddingHorizontal: 18, height: ITEM_H,
-    borderBottomWidth: 0.5, borderBottomColor: "rgba(255,255,255,0.05)",
+    borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.05)",
   },
   rowActive: { backgroundColor: "rgba(232,25,44,0.07)" },
   dot: {
     width: 10, height: 10, borderRadius: 5,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.15)",
   },
   dotActive: { backgroundColor: COLORS.red },
-  rowMain: { color: COLORS.white, fontSize: 15, fontWeight: "500" },
-  rowMainActive: { color: COLORS.white, fontWeight: "700" },
+  rowMain: { color: COLORS.text, fontSize: 15, fontWeight: "500" },
+  rowMainActive: { color: COLORS.text, fontWeight: "700" },
   rowSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
   check: { color: COLORS.red, fontSize: 18, fontWeight: "700" },
   footer: {

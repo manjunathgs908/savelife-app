@@ -1,4 +1,4 @@
-export const PRICING_API = "https://medifleet-backend.onrender.com/api/pricing";
+export const PRICING_API = "https://api.savelife.health/api/pricing";
 
 /**
  * Returns { distFare, base, total } for any ambulance type.

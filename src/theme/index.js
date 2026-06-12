@@ -2,13 +2,14 @@
 export const COLORS = {
   red: "#e8192c",
   redDark: "#a01020",
-  bg: "#050608",
-  bg2: "#080b12",
-  bg3: "#0d1018",
+  bg: "#FFFFFF",
+  bg2: "#F8F9FA",
+  bg3: "#F0F1F3",
   white: "#ffffff",
-  gray: "rgba(255,255,255,0.5)",
-  grayDim: "rgba(255,255,255,0.35)",
-  border: "rgba(255,255,255,0.08)",
+  text: "#111827",
+  gray: "#374151",
+  grayDim: "#9CA3AF",
+  border: "#E5E7EB",
   green: "#22c55e",
 };
 export const LANGUAGES = ["EN", "KN", "HI", "TE", "TA", "ML"];
