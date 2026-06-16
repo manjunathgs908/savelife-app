@@ -1,88 +1,75 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
-  View, Text, TouchableOpacity,
-  StyleSheet, Platform, ActivityIndicator,
+  View, Text, TouchableOpacity, ScrollView,
+  StyleSheet, Platform, ActivityIndicator, Dimensions,
+  TextInput, FlatList, Modal, KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
-import { COLORS, LANGUAGES, t } from "../theme";
+import { COLORS } from "../theme";
 import { AppContext } from "../../App";
 
+const { width: SCREEN_W } = Dimensions.get("window");
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
-// ─── Dark map style ────────────────────────────────────────────────────────────
-const DARK_MAP_STYLE = [
-  { elementType: "geometry",               stylers: [{ color: "#1a1f2e" }] },
-  { elementType: "labels.text.stroke",     stylers: [{ color: "#1a1f2e" }] },
-  { elementType: "labels.text.fill",       stylers: [{ color: "#8a9bb0" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill",  stylers: [{ color: "#c0c8d8" }] },
-  { featureType: "poi",                    elementType: "labels",             stylers: [{ visibility: "off" }] },
-  { featureType: "road",                   elementType: "geometry",           stylers: [{ color: "#2c3347" }] },
-  { featureType: "road",                   elementType: "geometry.stroke",    stylers: [{ color: "#1a1f2e" }] },
-  { featureType: "road",                   elementType: "labels.text.fill",   stylers: [{ color: "#6b7a94" }] },
-  { featureType: "road.highway",           elementType: "geometry",           stylers: [{ color: "#3d4a63" }] },
-  { featureType: "road.highway",           elementType: "geometry.stroke",    stylers: [{ color: "#1a1f2e" }] },
-  { featureType: "road.highway",           elementType: "labels.text.fill",   stylers: [{ color: "#a0aec0" }] },
-  { featureType: "transit",               elementType: "geometry",            stylers: [{ color: "#252d40" }] },
-  { featureType: "water",                  elementType: "geometry",           stylers: [{ color: "#0d1520" }] },
-  { featureType: "water",                  elementType: "labels.text.fill",   stylers: [{ color: "#3a4a5c" }] },
-  { featureType: "landscape",             elementType: "geometry",            stylers: [{ color: "#1a2030" }] },
-];
+// ─── Layout constants ─────────────────────────────────────────────────────────
+const CARD_GAP = 10;
+const SIDE_PAD = 16;
+const CARD_W   = (SCREEN_W - SIDE_PAD * 2 - CARD_GAP * 2) / 3;
+const CARD_H   = Math.round(CARD_W * 1.28);   // ≈ 138 px on 375 pt screen
 
-// ─── Default region ────────────────────────────────────────────────────────────
-const BANGALORE = { latitude: 12.9716, longitude: 77.5946, latitudeDelta: 0.045, longitudeDelta: 0.045 };
+const MAP_H   = 225;    // map container height
+const OVERLAP = 16;     // how far the location card slides over the map bottom
 
-// ─── Ambulance simulation helpers ─────────────────────────────────────────────
+// ─── Map default region ───────────────────────────────────────────────────────
+const BANGALORE = {
+  latitude: 12.9716, longitude: 77.5946,
+  latitudeDelta: 0.04, longitudeDelta: 0.04,
+};
+
+// ─── Ambulance simulation ─────────────────────────────────────────────────────
 const AMB_SEED = [
-  { dlat:  0.008, dlng:  0.005, type: "BLS", label: "SL-01" },
-  { dlat: -0.006, dlng:  0.011, type: "ALS", label: "SL-02" },
-  { dlat:  0.004, dlng: -0.009, type: "ICU", label: "SL-03" },
-  { dlat: -0.011, dlng: -0.004, type: "BLS", label: "SL-04" },
-  { dlat:  0.013, dlng:  0.003, type: "BLS", label: "SL-05" },
+  { dlat:  0.008, dlng:  0.005, type: "BLS" },
+  { dlat: -0.006, dlng:  0.011, type: "ALS" },
+  { dlat:  0.004, dlng: -0.009, type: "ICU" },
+  { dlat: -0.011, dlng: -0.004, type: "BLS" },
+  { dlat:  0.013, dlng:  0.003, type: "BLS" },
 ];
 
 function createAmbulances(base) {
   return AMB_SEED.map((s, i) => ({
-    id: i,
-    type: s.type,
-    label: s.label,
+    id: i, type: s.type,
     coord: { latitude: base.latitude + s.dlat, longitude: base.longitude + s.dlng },
-    dir: { lat: s.dlat > 0 ? -1 : 1, lng: s.dlng > 0 ? -1 : 1 },
+    dir:   { lat: s.dlat > 0 ? -1 : 1, lng: s.dlng > 0 ? -1 : 1 },
   }));
 }
 
 function moveAmbulances(prev, base) {
   if (!base) return prev;
   return prev.map(amb => {
-    const step = 0.00018;
-    const jitter = 0.6 + Math.random() * 0.8;
-    const newLat = amb.coord.latitude + step * amb.dir.lat * jitter;
+    const step = 0.00018, jitter = 0.6 + Math.random() * 0.8;
+    const newLat = amb.coord.latitude  + step * amb.dir.lat * jitter;
     const newLng = amb.coord.longitude + step * amb.dir.lng * jitter;
-    const dirLat = Math.abs(newLat - base.latitude) > 0.016 ? -amb.dir.lat : amb.dir.lat;
+    const dirLat = Math.abs(newLat - base.latitude)  > 0.016 ? -amb.dir.lat : amb.dir.lat;
     const dirLng = Math.abs(newLng - base.longitude) > 0.016 ? -amb.dir.lng : amb.dir.lng;
     return { ...amb, coord: { latitude: newLat, longitude: newLng }, dir: { lat: dirLat, lng: dirLng } };
   });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
-
 async function reverseGeocode(lat, lng) {
   try {
-    const res = await fetch(
+    const res  = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`
     );
     const data = await res.json();
     if (data.results?.length) {
-      // Return short locality name (e.g. "Indiranagar, Bangalore")
       const comp = data.results[0].address_components;
-      const locality    = comp.find(c => c.types.includes("sublocality_level_1") || c.types.includes("locality"))?.long_name;
-      const city        = comp.find(c => c.types.includes("administrative_area_level_2") || c.types.includes("locality"))?.long_name;
+      const locality = comp.find(c =>
+        c.types.includes("sublocality_level_1") || c.types.includes("locality")
+      )?.long_name;
+      const city = comp.find(c =>
+        c.types.includes("administrative_area_level_2") || c.types.includes("locality")
+      )?.long_name;
       if (locality && city && locality !== city) return `${locality}, ${city}`;
       return data.results[0].formatted_address.split(",").slice(0, 2).join(",");
     }
@@ -90,74 +77,318 @@ async function reverseGeocode(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// ─── 3 × 3 services grid ──────────────────────────────────────────────────────
-const GRID = [
-  { icon: "📅", label: "Schedule",      screen: "Schedule",       params: {} },
-  { icon: "✈️", label: "Air Ambulance", screen: "AirAmbulance",   params: {} },
-  { icon: "🎪", label: "Event",         screen: "EventAmbulance", params: {} },
-  { icon: "🛡️", label: "Standby",       screen: "Standby",        params: {} },
-  { icon: "🏠", label: "Home Care",     screen: "HomeCare",       params: {} },
-  { icon: "❄️", label: "Freezer Box",   screen: "FreezerBox",     params: {} },
-  { icon: "⚰️", label: "Remains",       screen: "Remains",        params: {} },
-  { icon: "🕉️", label: "Antim Yatra",  screen: "AntimYatra",     params: {} },
-  { icon: "🚂", label: "Train",         screen: "Train",          params: {} },
+// ─── Reusable Places search bottom sheet (pickup + drop) ──────────────────────
+function PlacesSearchSheet({ visible, title, onClose, onSelect }) {
+  const [query,       setQuery]       = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading,     setLoading]     = useState(false);
+  const debRef = useRef(null);
+
+  useEffect(() => {
+    if (visible) { setQuery(""); setSuggestions([]); }
+  }, [visible]);
+
+  function onChangeQuery(text) {
+    setQuery(text);
+    clearTimeout(debRef.current);
+    if (text.length < 2) { setSuggestions([]); return; }
+    debRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in`
+        );
+        const data = await res.json();
+        setSuggestions(data.predictions || []);
+      } catch {}
+      setLoading(false);
+    }, 350);
+  }
+
+  async function selectPlace(pred) {
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json` +
+        `?place_id=${pred.place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
+      );
+      const data = await res.json();
+      if (data.result?.geometry) {
+        onSelect({
+          coord: {
+            latitude:  data.result.geometry.location.lat,
+            longitude: data.result.geometry.location.lng,
+          },
+          label: data.result.formatted_address || pred.description,
+        });
+      }
+    } catch {}
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      {/* Dim backdrop — tapping it closes the sheet */}
+      <TouchableOpacity
+        style={sh.backdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={sh.kvWrap}
+        pointerEvents="box-none"
+      >
+        <View style={sh.sheet}>
+          {/* Drag handle */}
+          <View style={sh.handle} />
+
+          {/* Header row */}
+          <View style={sh.headerRow}>
+            <TouchableOpacity style={sh.backBtn} onPress={onClose} activeOpacity={0.7}>
+              <Text style={sh.backArrow}>←</Text>
+            </TouchableOpacity>
+            <Text style={sh.sheetTitle}>{title}</Text>
+          </View>
+
+          {/* Search input */}
+          <View style={sh.inputRow}>
+            <Text style={sh.searchIco}>🔍</Text>
+            <TextInput
+              style={sh.input}
+              placeholder="Hospital, area or address…"
+              placeholderTextColor={COLORS.grayDim}
+              value={query}
+              onChangeText={onChangeQuery}
+              autoFocus
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={() => { setQuery(""); setSuggestions([]); }}>
+                <Text style={sh.clearBtn}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Spinner / results */}
+          {loading && (
+            <ActivityIndicator color={COLORS.red} style={{ marginTop: 20 }} />
+          )}
+
+          {!loading && suggestions.length === 0 && query.length >= 2 && (
+            <Text style={sh.emptyTxt}>No results found</Text>
+          )}
+
+          {!loading && query.length < 2 && (
+            <Text style={sh.hintTxt}>Type a hospital, area or address…</Text>
+          )}
+
+          <FlatList
+            data={suggestions}
+            keyExtractor={item => item.place_id}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={sh.row} onPress={() => selectPlace(item)} activeOpacity={0.7}>
+                <View style={sh.rowIco}>
+                  <Text style={{ fontSize: 14 }}>📍</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={sh.rowMain} numberOfLines={1}>
+                    {item.structured_formatting?.main_text || item.description}
+                  </Text>
+                  {item.structured_formatting?.secondary_text ? (
+                    <Text style={sh.rowSub} numberOfLines={1}>
+                      {item.structured_formatting.secondary_text}
+                    </Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── 10 service cards ─────────────────────────────────────────────────────────
+// Grid layout:
+//  Row 1 → Emergency · Schedule · Air Ambulance
+//  Row 2 → Air Cargo · Freezer Box · Dead Body Transport
+//  Row 3 → Event · Antim Yatra · Train
+//  Row 4 → Standby (1 col) · Promo banner (2 cols)
+const SERVICES = [
+  { icon: "🚑", label: "Emergency\nAmbulance", subtitle: "Fastest Response",
+    screen: "MapBooking",     bg: "#e8192c", light: false, popular: true,
+    gloss: "rgba(255,255,255,0.26)" },
+  { icon: "📅", label: "Schedule\nAmbulance",  subtitle: "Book in Advance",
+    screen: "Schedule",       bg: "#1a56db", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.22)" },
+  { icon: "🚁", label: "Air Ambulance",         subtitle: "Quick & Safe",
+    screen: "AirAmbulance",   bg: "#0d9488", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.22)" },
+  { icon: "✈️", label: "Air Cargo",             subtitle: "Body Shifting",
+    screen: "HomeCare",       bg: "#5b21b6", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.20)" },
+  { icon: "❄️", label: "Freezer Box",           subtitle: "Safe & Hygienic",
+    screen: "FreezerBox",     bg: "#6d28d9", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.20)" },
+  { icon: "⚰️", label: "Dead Body\nTransport",  subtitle: "Dignified Service",
+    screen: "Remains",        bg: "#ea580c", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.22)" },
+  { icon: "🎪", label: "Event\nAmbulance",       subtitle: "Events & Occasions",
+    screen: "EventAmbulance", bg: "#d97706", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.24)" },
+  { icon: "🔥", label: "Antim Yatra",            subtitle: "Local Cremation",
+    screen: "AntimYatra",     bg: "#fef3c7", light: true,  popular: false,
+    gloss: "rgba(0,0,0,0.04)" },
+  { icon: "🚂", label: "Train\nTransport",        subtitle: "Pan India Service",
+    screen: "Train",          bg: "#0891b2", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.22)" },
+  { icon: "🛡️", label: "Standby\nAmbulance",     subtitle: "On Standby 24/7",
+    screen: "Standby",        bg: "#7c3aed", light: false, popular: false,
+    gloss: "rgba(255,255,255,0.20)" },
 ];
 
-// ─── Custom marker views ───────────────────────────────────────────────────────
+// ─── Map markers ──────────────────────────────────────────────────────────────
+const AMB_COLOR = { BLS: "#ef4444", ALS: "#3b82f6", ICU: "#dc2626" };
+
 function UserPin() {
   return (
     <View style={mk.userOuter}>
-      <View style={mk.userInner} />
+      <View style={mk.userMid}>
+        <View style={mk.userCore} />
+      </View>
     </View>
   );
 }
-
-const AMB_COLORS = { BLS: "#22c55e", ALS: "#3b82f6", ICU: "#e8192c" };
 
 function AmbPin({ type }) {
-  const accent = AMB_COLORS[type] || "#22c55e";
+  const color = AMB_COLOR[type] || "#ef4444";
   return (
-    <View style={[mk.ambWrap, { borderColor: accent }]}>
-      <Text style={mk.ambEmoji}>🚑</Text>
-      <View style={[mk.ambDot, { backgroundColor: accent }]} />
+    <View style={{ alignItems: "center" }}>
+      <View style={[mk.pinCircle, { backgroundColor: color }]}>
+        <Text style={mk.pinEmoji}>🚑</Text>
+      </View>
+      <View style={[mk.pinTail, { borderTopColor: color }]} />
     </View>
   );
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
+// ─── Service card ─────────────────────────────────────────────────────────────
+function ServiceCard({ svc, onPress, fixedWidth }) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.svcCard,
+        { backgroundColor: svc.bg },
+        fixedWidth && { flex: 0, width: CARD_W },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.80}
+    >
+      {/* Gradient gloss: bright circle clipped to top-right corner */}
+      <View style={[styles.cardGloss, { backgroundColor: svc.gloss }]} />
+
+      {/* Popular badge — Emergency Ambulance only */}
+      {svc.popular && (
+        <View style={styles.popularBadge}>
+          <Text style={styles.popularTxt}>🔥 Popular</Text>
+        </View>
+      )}
+
+      {/* Icon fills top portion */}
+      <View style={styles.iconWrap}>
+        <Text style={styles.svcEmoji}>{svc.icon}</Text>
+      </View>
+
+      {/* Label + subtitle sit at the bottom */}
+      <View>
+        <Text style={[styles.svcName, svc.light ? styles.nameDark : styles.nameWhite]}>
+          {svc.label}
+        </Text>
+        <Text
+          style={[styles.svcSub, svc.light ? styles.subDark : styles.subWhite]}
+          numberOfLines={1}
+        >
+          {svc.subtitle}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Promotional banner (spans 2 columns) ─────────────────────────────────────
+function PromoCard() {
+  return (
+    <View style={styles.promoCard}>
+      <View style={styles.promoGloss} />
+
+      <View style={styles.promoLeft}>
+        <Text style={styles.promoTagline}>Fast.{"\n"}Safe.{"\n"}Reliable.</Text>
+        <Text style={styles.promoBody}>
+          SaveLife is always there{"\n"}when you need us.
+        </Text>
+        <TouchableOpacity style={styles.promoBtn} activeOpacity={0.8}>
+          <Text style={styles.promoBtnTxt}>Know More  →</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.promoRight}>
+        <Text style={styles.promoAmbEmoji}>🚑</Text>
+        <Text style={styles.promoBrandLbl}>SaveLife</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
-  const { lang, setLang } = useContext(AppContext);
+  useContext(AppContext);
 
-  const [userCoord,  setUserCoord]  = useState(null);
-  const [userLabel,  setUserLabel]  = useState("Getting location…");
-  const [locLoading, setLocLoading] = useState(true);
-  const [ambulances, setAmbulances] = useState([]);
+  const [userCoord,       setUserCoord]       = useState(null);
+  const [userLabel,       setUserLabel]       = useState("Getting location…");
+  const [locLoading,      setLocLoading]      = useState(true);
+  const [ambulances,      setAmbulances]      = useState([]);
 
-  const coordRef       = useRef(null);
-  const mapRef         = useRef(null);
-  const ambCreated     = useRef(false);
+  // Pickup-location inline search (overrides GPS if user manually picks)
+  const [pickupSheetVisible,  setPickupSheetVisible]  = useState(false);
+  const [customPickupCoord,   setCustomPickupCoord]   = useState(null);
+  const [customPickupLabel,   setCustomPickupLabel]   = useState("");
 
-  // ── GPS on mount ────────────────────────────────────────────────────────────
+  // Drop-location inline search
+  const [dropSheetVisible, setDropSheetVisible] = useState(false);
+  const [dropLabel,        setDropLabel]        = useState("");
+  const [dropCoord,        setDropCoord]        = useState(null);
+
+  const coordRef   = useRef(null);
+  const mapRef     = useRef(null);
+  const ambCreated = useRef(false);
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        setUserLabel("Location permission denied");
+        setUserLabel("Bangalore, Karnataka");
         setLocLoading(false);
         return;
       }
       try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const loc   = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         coordRef.current = coord;
         setUserCoord(coord);
         const label = await reverseGeocode(coord.latitude, coord.longitude);
         setUserLabel(label);
-        // Animate map to user
-        mapRef.current?.animateToRegion(
-          { ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 },
-          900
-        );
+        mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900);
       } catch {
         const last = await Location.getLastKnownPositionAsync();
         if (last) {
@@ -166,10 +397,7 @@ export default function HomeScreen({ navigation }) {
           setUserCoord(coord);
           const label = await reverseGeocode(coord.latitude, coord.longitude);
           setUserLabel(label);
-          mapRef.current?.animateToRegion(
-            { ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 },
-            900
-          );
+          mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900);
         } else {
           setUserLabel("Bangalore, Karnataka");
         }
@@ -178,322 +406,662 @@ export default function HomeScreen({ navigation }) {
     })();
   }, []);
 
-  // ── Create ambulances once GPS is ready ─────────────────────────────────────
   useEffect(() => {
     if (!userCoord || ambCreated.current) return;
     ambCreated.current = true;
     setAmbulances(createAmbulances(userCoord));
   }, [userCoord]);
 
-  // ── Slowly move ambulances every 2 s ────────────────────────────────────────
   useEffect(() => {
     if (ambulances.length === 0) return;
-    const id = setInterval(() => {
-      setAmbulances(prev => moveAmbulances(prev, coordRef.current));
-    }, 2000);
+    const id = setInterval(
+      () => setAmbulances(prev => moveAmbulances(prev, coordRef.current)),
+      2000
+    );
     return () => clearInterval(id);
   }, [ambulances.length]);
 
-  const nextLang = () => {
-    const idx = LANGUAGES.indexOf(lang);
-    setLang(LANGUAGES[(idx + 1) % LANGUAGES.length]);
-  };
+  const nearest = ambulances.find(a => a.type === "BLS") ?? ambulances[0];
+
+  // Effective pickup = manually chosen location, else GPS
+  const effectivePickupCoord = customPickupCoord ?? userCoord;
+  const effectivePickupLabel = customPickupLabel || userLabel;
+  const bothSelected = !!(effectivePickupCoord && dropCoord);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.root}>
 
-      {/* ── Full-screen map ──────────────────────────────────────────────────── */}
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        style={StyleSheet.absoluteFill}
-        customMapStyle={DARK_MAP_STYLE}
-        initialRegion={BANGALORE}
-        showsMyLocationButton={false}
-        showsCompass={false}
-        toolbarEnabled={false}
-        moveOnMarkerPress={false}
-      >
-        {/* User location — green pin */}
-        {userCoord && (
-          <Marker coordinate={userCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
-            <UserPin />
-          </Marker>
-        )}
+      {/* ══════════════════════════════ HEADER ═══════════════════════════════ */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.menuBtn} activeOpacity={0.7}>
+          <Text style={styles.menuIcon}>≡</Text>
+        </TouchableOpacity>
 
-        {/* Nearby ambulances */}
-        {ambulances.map(amb => (
-          <Marker
-            key={amb.id}
-            coordinate={amb.coord}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
-          >
-            <AmbPin type={amb.type} />
-          </Marker>
-        ))}
-      </MapView>
-
-      {/* ── Floating top bar ─────────────────────────────────────────────────── */}
-      <View style={styles.topBar}>
-        {/* Logo + location */}
-        <View style={styles.topLeft}>
-          <Text style={styles.brand}>
-            <Text style={{ color: COLORS.red }}>Save</Text>
-            <Text style={{ color: COLORS.white }}>Life</Text>
+        <View style={styles.brand}>
+          <Text style={styles.brandTxt}>
+            <Text style={{ color: COLORS.text }}>Save</Text>
+            <Text style={{ color: COLORS.red  }}>Life</Text>
           </Text>
-          <View style={styles.locationRow}>
+          <TouchableOpacity style={styles.locationRow} activeOpacity={0.7}>
             {locLoading
-              ? <ActivityIndicator size="small" color={COLORS.red} style={{ marginRight: 6 }} />
-              : <Text style={styles.locationDot}>📍</Text>
+              ? <ActivityIndicator size="small" color={COLORS.red} style={{ marginRight: 4 }} />
+              : <Text style={styles.locPin}>📍</Text>
             }
-            <Text style={styles.locationTxt} numberOfLines={1}>{userLabel}</Text>
-          </View>
+            <Text style={styles.locationLbl} numberOfLines={1}>{userLabel}</Text>
+            <Text style={styles.chevron}> ›</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Right controls */}
-        <View style={styles.topRight}>
-          <TouchableOpacity style={styles.langChip} onPress={nextLang}>
-            <Text style={styles.langTxt}>{lang}</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.bellWrap} activeOpacity={0.7}>
+            <Text style={styles.bellEmoji}>🔔</Text>
+            <View style={styles.bellBadge} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileBtn}
-            onPress={() => navigation.navigate("Profile")}
-          >
-            <Text style={{ fontSize: 18 }}>👤</Text>
+          <TouchableOpacity style={styles.sosBtn} activeOpacity={0.85}>
+            <Text style={styles.sosEmoji}>📞</Text>
+            <Text style={styles.sosTxt}>SOS</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Live badge ───────────────────────────────────────────────────────── */}
-      {ambulances.length > 0 && (
-        <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveTxt}>{ambulances.length} units nearby</Text>
+      {/* ═══════════════════════════════ MAP ═════════════════════════════════
+          MAP_H = 225px
+          nearestCard + liveBtn are at bottom: (OVERLAP + 10) = 26px from
+          the map's bottom edge — safely above the OVERLAP zone where the
+          location card slides in.
+      */}
+      <View style={styles.mapWrap}>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          initialRegion={BANGALORE}
+          showsMyLocationButton={false}
+          showsCompass={false}
+          toolbarEnabled={false}
+          moveOnMarkerPress={false}
+        >
+          {userCoord && (
+            <Marker coordinate={userCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <UserPin />
+            </Marker>
+          )}
+          {ambulances.map(amb => (
+            <Marker
+              key={amb.id}
+              coordinate={amb.coord}
+              anchor={{ x: 0.5, y: 1.0 }}
+              tracksViewChanges={false}
+            >
+              <AmbPin type={amb.type} />
+            </Marker>
+          ))}
+        </MapView>
+
+        {/* Nearest Ambulance — BOTTOM-LEFT */}
+        {nearest && (
+          <View style={styles.nearestCard}>
+            <Text style={styles.nearestLbl}>Nearest Ambulance</Text>
+            <View style={styles.nearestRow}>
+              <Text style={styles.nearestTime}>2 min away</Text>
+              <View style={styles.nearestDot} />
+            </View>
+            <View style={styles.nearestPill}>
+              <Text style={styles.nearestPillTxt}>{nearest.type} Ambulance</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Live Tracking — BOTTOM-RIGHT */}
+        <TouchableOpacity
+          style={styles.liveBtn}
+          onPress={() => navigation.navigate("Tracking")}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.liveIco}>🎯</Text>
+          <Text style={styles.liveTxt}>Live Tracking</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ═══════════════════════ SCROLLABLE CONTENT ══════════════════════════ */}
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+
+        {/* ── Location card — slides OVERLAP px over the map bottom ─────────── */}
+        <View style={styles.locCard}>
+
+          {/* Pickup row — opens inline search sheet */}
+          <TouchableOpacity
+            style={styles.locRow}
+            onPress={() => setPickupSheetVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.dotGreen} />
+            <View style={styles.locTexts}>
+              <Text style={styles.locTitle}>Pickup Location</Text>
+              <Text style={styles.locSubTxt} numberOfLines={1}>
+                {locLoading ? "Getting your location…" : (effectivePickupLabel || "Your current location")}
+              </Text>
+            </View>
+            <View style={styles.locBtn}>
+              <Text style={{ fontSize: 17 }}>{customPickupLabel ? "✅" : "🎯"}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.locDivider} />
+
+          {/* Drop row — opens inline bottom sheet, no navigation */}
+          <TouchableOpacity
+            style={styles.locRow}
+            onPress={() => setDropSheetVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.dotRed}>
+              <Text style={{ color: "#fff", fontSize: 9 }}>▼</Text>
+            </View>
+            <View style={styles.locTexts}>
+              <Text style={styles.locTitle}>Drop Location</Text>
+              <Text style={styles.locSubTxt} numberOfLines={1}>
+                {dropLabel || "Search hospital or location"}
+              </Text>
+            </View>
+            <View style={styles.locBtn}>
+              <Text style={{ fontSize: 17 }}>{dropLabel ? "✅" : "📋"}</Text>
+            </View>
+          </TouchableOpacity>
+
+        </View>
+
+        {/* ── Our Services ──────────────────────────────────────────────────── */}
+        <View style={styles.svcSection}>
+
+          <View style={styles.svcHeader}>
+            <Text style={styles.svcTitle}>Our Services</Text>
+            <TouchableOpacity activeOpacity={0.7}>
+              <Text style={styles.viewAll}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.grid}>
+            {/* Rows 1–3 : each row = 3 equal cards */}
+            {[0, 1, 2].map(row => (
+              <View key={row} style={styles.gridRow}>
+                {SERVICES.slice(row * 3, row * 3 + 3).map(svc => (
+                  <ServiceCard
+                    key={svc.label}
+                    svc={svc}
+                    onPress={() => navigation.navigate(svc.screen)}
+                  />
+                ))}
+              </View>
+            ))}
+
+            {/* Row 4 : Standby (1 col) + Promo banner (fills remaining ≈ 2 cols) */}
+            <View style={styles.gridRow}>
+              <ServiceCard
+                svc={SERVICES[9]}
+                onPress={() => navigation.navigate(SERVICES[9].screen)}
+                fixedWidth
+              />
+              <PromoCard />
+            </View>
+          </View>
+
+        </View>
+      </ScrollView>
+
+      {/* ═══════════════ FIND AMBULANCE CTA ═══════════════════════════════════ */}
+      {bothSelected && (
+        <View style={styles.findAmbWrap}>
+          <TouchableOpacity
+            style={styles.findAmbBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate("MapBooking", {
+              pickupCoord: effectivePickupCoord,
+              pickupLabel: effectivePickupLabel,
+              dropCoord,
+              dropLabel,
+            })}
+          >
+            <Text style={styles.findAmbTxt}>Find Ambulance  →</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* ── Bottom sheet ─────────────────────────────────────────────────────── */}
-      <View style={styles.sheet}>
-        <View style={styles.handle} />
+      {/* ═════════════════════════ INLINE SEARCH SHEETS ═══════════════════════ */}
+      <PlacesSearchSheet
+        visible={pickupSheetVisible}
+        title="Pickup Location"
+        onClose={() => setPickupSheetVisible(false)}
+        onSelect={({ coord, label }) => {
+          setCustomPickupCoord(coord);
+          setCustomPickupLabel(label);
+          setPickupSheetVisible(false);
+        }}
+      />
+      <PlacesSearchSheet
+        visible={dropSheetVisible}
+        title="Drop Location"
+        onClose={() => setDropSheetVisible(false)}
+        onSelect={({ coord, label }) => {
+          setDropCoord(coord);
+          setDropLabel(label);
+          setDropSheetVisible(false);
+        }}
+      />
 
-        {/* Greeting + status */}
-        <View style={styles.greetRow}>
-          <Text style={styles.greetTxt}>{getGreeting()} 👋</Text>
-          <View style={styles.readyBadge}>
-            <View style={styles.readyDot} />
-            <Text style={styles.readyTxt}>
-              {t(lang, "Ready", "ಸಿದ್ಧ", "तैयार", "సిద్ధం", "தயார்", "തയ്യാർ")}
-            </Text>
-          </View>
-        </View>
-
-        {/* WHERE TO — primary CTA */}
-        <TouchableOpacity
-          style={styles.whereToBtn}
-          onPress={() => navigation.navigate("MapBooking")}
-          activeOpacity={0.88}
-        >
-          <View style={styles.searchIcoBox}>
-            <Text style={{ fontSize: 18 }}>🔍</Text>
-          </View>
-          <Text style={styles.whereToTxt}>
-            {t(lang, "Where to?", "ಎಲ್ಲಿಗೆ?", "कहाँ जाना है?", "ఎక్కడికి?", "எங்கு?", "എങ്ങോട്ട്?")}
-          </Text>
-          <View style={styles.whereToArrow}>
-            <Text style={{ color: COLORS.white, fontSize: 16, fontWeight: "700" }}>→</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* 3 × 3 services grid */}
-        <View style={styles.grid}>
-          {[0, 1, 2].map(row => (
-            <View key={row} style={styles.gridRow}>
-              {GRID.slice(row * 3, row * 3 + 3).map(s => (
-                <TouchableOpacity
-                  key={s.label}
-                  style={styles.gridCell}
-                  onPress={() => navigation.navigate(s.screen, s.params)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.cellIco}>{s.icon}</Text>
-                  <Text style={styles.cellLbl} numberOfLines={2}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-        </View>
-      </View>
     </View>
   );
 }
 
 // ─── Marker styles ────────────────────────────────────────────────────────────
 const mk = StyleSheet.create({
-  // User location — pulsing green circle
+  // Google-Maps-style blue pulsing user dot
   userOuter: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: "rgba(34,197,94,0.25)",
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "rgba(59,130,246,0.14)",
     alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "rgba(34,197,94,0.5)",
   },
-  userInner: {
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: COLORS.green,
+  userMid: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: "rgba(59,130,246,0.28)",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "rgba(255,255,255,0.88)",
   },
+  userCore: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: "#3b82f6" },
 
-  // Ambulance pin
-  ambWrap: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: "rgba(5,6,8,0.88)",
+  // Teardrop ambulance pin
+  pinCircle: {
+    width: 38, height: 38, borderRadius: 19,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1.5,
-    shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 4,
-    elevation: 6,
+    borderWidth: 2.5, borderColor: "#fff",
+    shadowColor: "#000", shadowOpacity: 0.30, shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 }, elevation: 6,
   },
-  ambEmoji: { fontSize: 20, lineHeight: 22 },
-  ambDot: {
-    position: "absolute", bottom: 4, right: 4,
-    width: 7, height: 7, borderRadius: 3.5,
-    borderWidth: 1, borderColor: "rgba(5,6,8,0.9)",
+  pinEmoji: { fontSize: 19, lineHeight: 21 },
+  pinTail: {
+    width: 0, height: 0,
+    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 12,
+    borderLeftColor: "transparent", borderRightColor: "transparent",
+    marginTop: -1,
   },
 });
 
-// ─── Screen styles ─────────────────────────────────────────────────────────────
+// ─── Screen styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
+  root: { flex: 1, backgroundColor: COLORS.bg },
 
-  // ── Top bar ──────────────────────────────────────────────────────────────────
-  topBar: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 40,
-    left: 0, right: 0,
+  // ══ HEADER ══════════════════════════════════════════════════════════════════
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    zIndex: 10,
-  },
-  topLeft: {
-    backgroundColor: "rgba(5,6,8,0.82)",
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.1)",
-    maxWidth: "70%",
-  },
-  brand: { fontSize: 20, fontWeight: "900", lineHeight: 22 },
-  locationRow: { flexDirection: "row", alignItems: "center", marginTop: 3 },
-  locationDot: { fontSize: 11, marginRight: 3 },
-  locationTxt: {
-    color: COLORS.grayDim, fontSize: 11, fontWeight: "500", flexShrink: 1,
-  },
-  topRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  langChip: {
-    backgroundColor: "rgba(232,25,44,0.15)",
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
-    borderWidth: 0.5, borderColor: "rgba(232,25,44,0.35)",
-  },
-  langTxt: { color: COLORS.red, fontWeight: "800", fontSize: 12 },
-  profileBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(5,6,8,0.82)",
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.12)",
-  },
-
-  // ── Live units badge ──────────────────────────────────────────────────────────
-  liveBadge: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 120 : 106,
-    alignSelf: "center",
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(5,6,8,0.8)",
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 0.5, borderColor: "rgba(34,197,94,0.3)",
-    zIndex: 10,
-  },
-  liveDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: COLORS.green,
-  },
-  liveTxt: { color: COLORS.green, fontSize: 11, fontWeight: "700" },
-
-  // ── Bottom sheet ──────────────────────────────────────────────────────────────
-  sheet: {
-    position: "absolute",
-    bottom: 0, left: 0, right: 0,
     backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 18,
-    paddingBottom: Platform.OS === "ios" ? 36 : 22,
-    paddingTop: 6,
+    paddingTop: Platform.OS === "ios" ? 52 : 38,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: COLORS.border,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    elevation: 28,
+    shadowOpacity: 0.06, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    zIndex: 10,
   },
-  handle: {
-    width: 38, height: 4, borderRadius: 2,
-    backgroundColor: "rgba(0,0,0,0.15)",
-    alignSelf: "center",
-    marginBottom: 14,
+  menuBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: COLORS.bg3,
+    alignItems: "center", justifyContent: "center",
+  },
+  menuIcon: { fontSize: 22, color: COLORS.text, lineHeight: 24 },
+
+  brand: { flex: 1 },
+  brandTxt: {
+    fontSize: 24, fontWeight: "900",
+    letterSpacing: -0.6, lineHeight: 28,
+  },
+  locationRow: { flexDirection: "row", alignItems: "center", marginTop: 1 },
+  locPin: { fontSize: 10, marginRight: 2 },
+  locationLbl: {
+    color: COLORS.gray, fontSize: 12, fontWeight: "500",
+    flexShrink: 1,
+  },
+  chevron: { color: COLORS.red, fontSize: 13, fontWeight: "700" },
+
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  bellWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: COLORS.bg3,
+    alignItems: "center", justifyContent: "center",
+  },
+  bellEmoji: { fontSize: 17 },
+  bellBadge: {
+    position: "absolute", top: 5, right: 5,
+    width: 9, height: 9, borderRadius: 4.5,
+    backgroundColor: COLORS.red,
+    borderWidth: 1.5, borderColor: COLORS.bg,
+  },
+  sosBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: COLORS.red,
+    borderRadius: 100, paddingHorizontal: 15, paddingVertical: 9,
+    shadowColor: COLORS.red,
+    shadowOpacity: 0.45, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 7,
+  },
+  sosEmoji: { fontSize: 13 },
+  sosTxt: { color: "#fff", fontSize: 13, fontWeight: "800", letterSpacing: 0.8 },
+
+  // ══ MAP ═════════════════════════════════════════════════════════════════════
+  mapWrap: {
+    height: MAP_H,
+    backgroundColor: "#e5e8ec",
+    overflow: "hidden",
   },
 
-  // Greeting row
-  greetRow: {
+  // Nearest Ambulance card — bottom-left, above the overlap zone
+  nearestCard: {
+    position: "absolute",
+    bottom: OVERLAP + 10,   // 26 px from map bottom
+    left: 12,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 }, elevation: 6,
+  },
+  nearestLbl: {
+    color: "#6b7280", fontSize: 9, fontWeight: "700",
+    letterSpacing: 0.6, textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  nearestRow: {
     flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
+    gap: 5, marginBottom: 6,
+  },
+  nearestTime: { color: "#22c55e", fontSize: 15, fontWeight: "800" },
+  nearestDot:  {
+    width: 7, height: 7, borderRadius: 3.5,
+    backgroundColor: "#22c55e",
+  },
+  nearestPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  nearestPillTxt: { color: "#374151", fontSize: 10.5, fontWeight: "700" },
+
+  // Live Tracking button — bottom-right, same vertical level as nearestCard
+  liveBtn: {
+    position: "absolute",
+    bottom: OVERLAP + 10,
+    right: 12,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 13, paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.14, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 }, elevation: 4,
+    borderWidth: 0.5, borderColor: COLORS.border,
+  },
+  liveIco: { fontSize: 13 },
+  liveTxt: { color: "#111827", fontSize: 12, fontWeight: "700" },
+
+  // ══ SCROLL ══════════════════════════════════════════════════════════════════
+  scroll: { flex: 1, backgroundColor: COLORS.bg },
+  scrollContent: { paddingBottom: 36 },
+
+  // ══ LOCATION CARD ═══════════════════════════════════════════════════════════
+  locCard: {
+    marginHorizontal: 16,
+    marginTop: -OVERLAP,        // slides OVERLAP px up over the map bottom
+    backgroundColor: COLORS.bg,
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.11, shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+    marginBottom: 20,
+    borderWidth: 0.5, borderColor: COLORS.border,
+  },
+  locRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  dotGreen: {
+    width: 13, height: 13, borderRadius: 6.5,
+    backgroundColor: "#22c55e", flexShrink: 0,
+  },
+  dotRed: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.red,
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  locTexts: { flex: 1 },
+  locTitle:  { color: COLORS.text, fontSize: 13, fontWeight: "600" },
+  locSubTxt: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
+  locBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: COLORS.bg3,
+    alignItems: "center", justifyContent: "center",
+  },
+  locDivider: { height: 0.5, backgroundColor: COLORS.border, marginHorizontal: 16 },
+
+  // ══ SERVICES SECTION ════════════════════════════════════════════════════════
+  svcSection: { paddingHorizontal: SIDE_PAD },
+  svcHeader: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     marginBottom: 12,
   },
-  greetTxt: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
-  readyBadge: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 0.5, borderColor: "rgba(34,197,94,0.3)",
-  },
-  readyDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.green },
-  readyTxt: { color: COLORS.green, fontSize: 11, fontWeight: "700" },
+  svcTitle: { color: COLORS.text, fontSize: 18, fontWeight: "800" },
+  viewAll:  { color: COLORS.red,  fontSize: 13, fontWeight: "600" },
 
-  // Where to button
-  whereToBtn: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: COLORS.red,
-    borderRadius: 16, paddingVertical: 15, paddingHorizontal: 16,
-    marginBottom: 14,
-    shadowColor: COLORS.red,
-    shadowOpacity: 0.45, shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
-  },
-  searchIcoBox: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center", justifyContent: "center",
-  },
-  whereToTxt: { flex: 1, color: COLORS.white, fontSize: 16, fontWeight: "700" },
-  whereToArrow: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.22)",
-    alignItems: "center", justifyContent: "center",
-  },
+  grid:    { gap: CARD_GAP },
+  gridRow: { flexDirection: "row", gap: CARD_GAP },
 
-  // 3×3 services grid
-  grid: { gap: 8 },
-  gridRow: { flexDirection: "row", gap: 8 },
-  gridCell: {
+  // ── Service card ─────────────────────────────────────────────────────────────
+  svcCard: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.04)",
-    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
-    paddingVertical: 12,
+    height: CARD_H,
+    borderRadius: 16,
+    padding: 11,
+    overflow: "hidden",        // clips the cardGloss circle
+    shadowColor: "#000",
+    shadowOpacity: 0.13,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+
+  // Gradient shimmer — large circle positioned to bleed from top-right corner
+  cardGloss: {
+    position: "absolute",
+    top: -24, right: -24,
+    width: 80, height: 80,
+    borderRadius: 40,
+  },
+
+  // "🔥 Popular" badge
+  popularBadge: {
+    position: "absolute", top: 8, right: 8,
+    backgroundColor: "rgba(255,255,255,0.28)",
+    borderRadius: 100, paddingHorizontal: 6, paddingVertical: 2.5,
+    borderWidth: 0.8, borderColor: "rgba(255,255,255,0.55)",
+  },
+  popularTxt: { color: "#fff", fontSize: 9, fontWeight: "800" },
+
+  // Icon area — expands to fill card top
+  iconWrap: { flex: 1, justifyContent: "flex-start", paddingTop: 4 },
+  svcEmoji: { fontSize: 38, lineHeight: 44 },
+
+  // Label + subtitle
+  svcName: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
+  nameWhite: { color: "#ffffff" },
+  nameDark:  { color: "#78350f" },
+  svcSub:    { fontSize: 10, marginTop: 2 },
+  subWhite:  { color: "rgba(255,255,255,0.76)" },
+  subDark:   { color: "#92400e" },
+
+  // ── Promo banner ─────────────────────────────────────────────────────────────
+  promoCard: {
+    flex: 1,
+    height: CARD_H,
+    borderRadius: 16,
+    backgroundColor: "#fff5f5",
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: COLORS.red,
+    shadowOpacity: 0.10, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+    borderWidth: 1, borderColor: "rgba(232,25,44,0.12)",
+  },
+
+  promoGloss: {
+    position: "absolute",
+    top: -20, right: 52,
+    width: 70, height: 70, borderRadius: 35,
+    backgroundColor: "rgba(232,25,44,0.07)",
+  },
+
+  promoLeft: {
+    flex: 1, padding: 11,
+    justifyContent: "space-between",
+  },
+  promoTagline: {
+    color: COLORS.red,
+    fontSize: 12.5, fontWeight: "900",
+    letterSpacing: -0.2, lineHeight: 16,
+  },
+  promoBody: {
+    color: COLORS.gray,
+    fontSize: 9, lineHeight: 13, fontWeight: "500",
+  },
+  promoBtn: {
+    alignSelf: "flex-start",
+    borderWidth: 1.5, borderColor: COLORS.red,
+    borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3.5,
+  },
+  promoBtnTxt: { color: COLORS.red, fontSize: 9, fontWeight: "700" },
+
+  promoRight: {
+    width: 62,
+    alignItems: "center", justifyContent: "flex-end",
+    paddingBottom: 8, paddingRight: 4,
+  },
+  promoAmbEmoji: { fontSize: 38, lineHeight: 44 },
+  promoBrandLbl: {
+    color: COLORS.red, fontSize: 7.5, fontWeight: "800",
+    letterSpacing: 0.3, marginTop: 2,
+  },
+
+  // ── Find Ambulance CTA ───────────────────────────────────────────────────────
+  findAmbWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: COLORS.bg,
+    borderTopWidth: 0.5,
+    borderTopColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 6,
+  },
+  findAmbBtn: {
+    backgroundColor: COLORS.red,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    shadowColor: COLORS.red,
+    shadowOpacity: 0.38, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  findAmbTxt: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+});
+
+// ─── Drop-search bottom-sheet styles ─────────────────────────────────────────
+const sh = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  kvWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === "ios" ? 42 : 24,
+    maxHeight: "82%",
+    shadowColor: "#000",
+    shadowOpacity: 0.18, shadowRadius: 24,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 24,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border,
+    alignSelf: "center", marginBottom: 14,
+  },
+  headerRow: {
+    flexDirection: "row", alignItems: "center", marginBottom: 14,
+  },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: COLORS.bg3,
     alignItems: "center", justifyContent: "center",
-    gap: 6,
+    marginRight: 10,
   },
-  cellIco: { fontSize: 28 },
-  cellLbl: {
-    color: COLORS.gray, fontSize: 11, fontWeight: "500",
-    textAlign: "center", lineHeight: 15,
-    paddingHorizontal: 4,
+  backArrow: { fontSize: 20, color: COLORS.text, lineHeight: 22 },
+  sheetTitle: {
+    fontSize: 17, fontWeight: "700", color: COLORS.text,
   },
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: COLORS.bg2,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    marginBottom: 10,
+  },
+  searchIco: { fontSize: 16, marginRight: 8, opacity: 0.5 },
+  input: {
+    flex: 1, fontSize: 15, color: COLORS.text,
+  },
+  clearBtn: { fontSize: 14, color: COLORS.grayDim, paddingHorizontal: 4 },
+  emptyTxt: {
+    color: COLORS.grayDim, fontSize: 14, textAlign: "center", marginTop: 24,
+  },
+  hintTxt: {
+    color: COLORS.grayDim, fontSize: 13, textAlign: "center", marginTop: 24,
+  },
+  row: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
+  },
+  rowIco: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: COLORS.bg3,
+    alignItems: "center", justifyContent: "center",
+    marginRight: 12,
+  },
+  rowMain: { fontSize: 14, fontWeight: "600", color: COLORS.text },
+  rowSub:  { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
 });

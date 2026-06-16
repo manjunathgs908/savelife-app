@@ -300,14 +300,17 @@ function DateTimePickerModal({ visible, mode, value, onConfirm, onClose }) {
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
-export default function MapBookingScreen({ navigation }) {
+export default function MapBookingScreen({ navigation, route }) {
   const [gpsCoord, setGpsCoord]       = useState(null);
-  const [pickupCoord, setPickupCoord] = useState(null);
-  const [pickupLabel, setPickupLabel] = useState("Finding your location…");
+  const [pickupCoord, setPickupCoord] = useState(route?.params?.pickupCoord ?? null);
+  const [pickupLabel, setPickupLabel] = useState(route?.params?.pickupLabel ?? "Finding your location…");
   const [geoLoading, setGeoLoading]   = useState(false);
 
-  const [dropCoord, setDropCoord]   = useState(null);
-  const [dropLabel, setDropLabel]   = useState("");
+  // True when the caller already supplied a pickup — GPS must not overwrite it.
+  const hasParamPickup = !!(route?.params?.pickupCoord);
+
+  const [dropCoord, setDropCoord]   = useState(route?.params?.dropCoord ?? null);
+  const [dropLabel, setDropLabel]   = useState(route?.params?.dropLabel ?? "");
   const [routeCoords, setRouteCoords] = useState([]);
   const [dist, setDist]             = useState(null);
   const [duration, setDuration]     = useState(null);
@@ -349,7 +352,7 @@ export default function MapBookingScreen({ navigation }) {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        setPickupLabel("Location permission denied — search below");
+        if (!hasParamPickup) setPickupLabel("Location permission denied — search below");
         geoEnabled.current = true;
         return;
       }
@@ -357,18 +360,7 @@ export default function MapBookingScreen({ navigation }) {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setGpsCoord(coord);
-        const label = await reverseGeocode(coord.latitude, coord.longitude);
-        setPickupCoord(coord);
-        setPickupLabel(label);
-        geoEnabled.current = true;
-        mapRef.current?.animateToRegion(
-          { ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900
-        );
-      } catch {
-        const last = await Location.getLastKnownPositionAsync();
-        if (last) {
-          const coord = { latitude: last.coords.latitude, longitude: last.coords.longitude };
-          setGpsCoord(coord);
+        if (!hasParamPickup) {
           const label = await reverseGeocode(coord.latitude, coord.longitude);
           setPickupCoord(coord);
           setPickupLabel(label);
@@ -376,6 +368,26 @@ export default function MapBookingScreen({ navigation }) {
             { ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900
           );
         } else {
+          // Caller supplied pickup — center map on that instead
+          mapRef.current?.animateToRegion(
+            { ...route.params.pickupCoord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900
+          );
+        }
+        geoEnabled.current = true;
+      } catch {
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) {
+          const coord = { latitude: last.coords.latitude, longitude: last.coords.longitude };
+          setGpsCoord(coord);
+          if (!hasParamPickup) {
+            const label = await reverseGeocode(coord.latitude, coord.longitude);
+            setPickupCoord(coord);
+            setPickupLabel(label);
+            mapRef.current?.animateToRegion(
+              { ...coord, latitudeDelta: 0.035, longitudeDelta: 0.035 }, 900
+            );
+          }
+        } else if (!hasParamPickup) {
           setPickupLabel("Bangalore, Karnataka");
         }
         geoEnabled.current = true;

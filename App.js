@@ -1,8 +1,10 @@
-﻿import React, { useState } from "react";
+﻿import React, { useState, useEffect } from "react";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as Updates from "expo-updates";
 import { COLORS } from "./src/theme";
 
 import SplashScreen from "./src/screens/SplashScreen";
@@ -33,7 +35,36 @@ const Stack = createNativeStackNavigator();
 export const AppContext = React.createContext();
 
 export default function App() {
-  const [lang, setLang] = useState("EN");
+  const [lang,     setLang]     = useState("EN");
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    async function checkOTA() {
+      // expo-updates is a no-op in dev mode / Expo Go — skip to avoid errors
+      if (__DEV__) return;
+      try {
+        const { isAvailable } = await Updates.checkForUpdateAsync();
+        if (isAvailable) {
+          setUpdating(true);
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync(); // reboots JS bundle — never returns
+        }
+      } catch {
+        // Network error, not an EAS build, etc — fail silently
+      }
+    }
+    checkOTA();
+  }, []);
+
+  if (updating) {
+    return (
+      <View style={ota.container}>
+        <ActivityIndicator size="large" color={COLORS.red} />
+        <Text style={ota.title}>Updating app…</Text>
+        <Text style={ota.sub}>Please wait a moment</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -76,3 +107,15 @@ export default function App() {
   );
 }
 
+const ota = StyleSheet.create({
+  container: {
+    flex: 1, backgroundColor: COLORS.bg,
+    alignItems: "center", justifyContent: "center",
+  },
+  title: {
+    color: COLORS.text, fontSize: 16, fontWeight: "700", marginTop: 16,
+  },
+  sub: {
+    color: COLORS.grayDim, fontSize: 13, marginTop: 6,
+  },
+});
