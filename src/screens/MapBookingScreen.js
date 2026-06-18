@@ -7,6 +7,8 @@ import {
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { COLORS } from "../theme";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { AMBULANCE_TYPES, AMB_RATES } from "../utils/ambulanceCatalog";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -160,6 +162,132 @@ function SearchModal({ visible, title, onClose, onSelect }) {
             </TouchableOpacity>
           )}
         />
+      </View>
+    </Modal>
+  );
+}
+
+// ─── "Who is the patient?" bottom sheet ───────────────────────────────────────
+const PATIENT_OPTIONS = [
+  { id: "myself",  icon: "🧍", label: "Myself",          sub: "Booking for yourself" },
+  { id: "another", icon: "👥", label: "Another Patient", sub: "Booking for someone else" },
+];
+
+function PatientSheet({ visible, onSkip, onContinue }) {
+  const [selected, setSelected] = useState("myself");
+
+  useEffect(() => {
+    if (visible) setSelected("myself");
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onSkip}>
+      <TouchableOpacity style={bsh.overlay} activeOpacity={1} onPress={onSkip} />
+      <View style={bsh.kvWrap} pointerEvents="box-none">
+        <View style={bsh.sheet}>
+          <View style={bsh.handle} />
+          <Text style={bsh.title}>Who is the patient?</Text>
+          <Text style={bsh.subtitle}>This helps us prepare the right assistance</Text>
+
+          {PATIENT_OPTIONS.map(opt => {
+            const active = selected === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[bsh.option, active && bsh.optionActive]}
+                onPress={() => setSelected(opt.id)}
+                activeOpacity={0.75}
+              >
+                <View style={[bsh.optionIco, active && bsh.optionIcoActive]}>
+                  <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[bsh.optionLabel, active && bsh.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={bsh.optionSub}>{opt.sub}</Text>
+                </View>
+                <View style={[bsh.radio, active && bsh.radioActive]}>
+                  {active && <View style={bsh.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          <View style={bsh.footerRow}>
+            <TouchableOpacity style={bsh.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+              <Text style={bsh.skipTxt}>Skip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={bsh.continueBtn} onPress={() => onContinue(selected)} activeOpacity={0.85}>
+              <Text style={bsh.continueTxt}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── "When do you need it?" bottom sheet — Now vs Schedule ───────────────────
+function ScheduleTypeSheet({ visible, onClose, onPickNow, onPickSchedule }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
+      <TouchableOpacity style={bsh.overlay} activeOpacity={1} onPress={onClose} />
+      <View style={bsh.kvWrap} pointerEvents="box-none">
+        <View style={bsh.sheet}>
+          <View style={bsh.handle} />
+          <Text style={bsh.title}>When do you need the ambulance?</Text>
+          <Text style={bsh.subtitle}>Choose now or schedule for later</Text>
+
+          <TouchableOpacity style={bsh.row} onPress={onPickNow} activeOpacity={0.75}>
+            <View style={[bsh.ico, { backgroundColor: "rgba(34,197,94,0.12)" }]}>
+              <Text style={{ fontSize: 18 }}>🟢</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={bsh.rowLabel}>Now</Text>
+              <Text style={bsh.rowSub}>Get an ambulance right away</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={bsh.row} onPress={onPickSchedule} activeOpacity={0.75}>
+            <View style={[bsh.ico, { backgroundColor: "rgba(232,25,44,0.12)" }]}>
+              <Text style={{ fontSize: 18 }}>🕐</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={bsh.rowLabel}>Schedule Ambulance</Text>
+              <Text style={bsh.rowSub}>Book for a later date & time</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Schedule date & time bottom sheet ─────────────────────────────────────────
+function ScheduleDetailSheet({ visible, date, onClose, onPickDate, onPickTime, onConfirm }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
+      <TouchableOpacity style={bsh.overlay} activeOpacity={1} onPress={onClose} />
+      <View style={bsh.kvWrap} pointerEvents="box-none">
+        <View style={bsh.sheet}>
+          <View style={bsh.handle} />
+          <Text style={bsh.title}>Schedule Ambulance</Text>
+          <Text style={bsh.subtitle}>Choose a date and time for pickup</Text>
+
+          <View style={bsh.chipRow}>
+            <TouchableOpacity style={bsh.chip} onPress={onPickDate} activeOpacity={0.75}>
+              <Text style={bsh.chipIco}>📅</Text>
+              <Text style={bsh.chipTxt}>{fmtDate(date)}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={bsh.chip} onPress={onPickTime} activeOpacity={0.75}>
+              <Text style={bsh.chipIco}>🕐</Text>
+              <Text style={bsh.chipTxt}>{fmtTime(date)}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={bsh.continueBtn} onPress={onConfirm} activeOpacity={0.85}>
+            <Text style={bsh.continueTxt}>Confirm Schedule</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
   );
@@ -320,6 +448,26 @@ export default function MapBookingScreen({ navigation, route }) {
   const [scheduleDate, setScheduleDate]   = useState(new Date());
   const [pickerMode, setPickerMode]       = useState(null);
 
+  // "Who is the patient?" — asked once, the first time the user heads to drop selection
+  const [patientSheetVisible, setPatientSheetVisible] = useState(false);
+  const [patientType, setPatientType]                 = useState(route?.params?.patientType ?? null);
+  const patientAskedRef = useRef(false);
+
+  // "Now" vs "Schedule Ambulance" sheets
+  const [scheduleTypeVisible,   setScheduleTypeVisible]   = useState(false);
+  const [scheduleDetailVisible, setScheduleDetailVisible] = useState(false);
+
+  // Inline ambulance list (reuses existing pricing logic — calcFare / AMB_RATES)
+  const [pricingList,    setPricingList]    = useState([]);
+  const [selectedAmbType, setSelectedAmbType] = useState("bls");
+
+  useEffect(() => {
+    fetch(PRICING_API)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .catch(() => {}); // silent fallback to local AMB_RATES
+  }, []);
+
   // Animated values for the center pin lift/drop
   const pinLift    = useRef(new Animated.Value(0)).current;
   const shadowScl  = useRef(new Animated.Value(1)).current;
@@ -417,10 +565,10 @@ export default function MapBookingScreen({ navigation, route }) {
         setDuration(leg.duration.value);
         setRouteCoords(decoded);
         // Fit map to show the full route, clearing both the top route-card (~180px)
-        // and the Phase B bottom sheet (~380px).
+        // and the taller Phase B ambulance-list sheet.
         setTimeout(() => {
           mapRef.current?.fitToCoordinates([from, to], {
-            edgePadding: { top: 200, right: 60, bottom: 400, left: 60 },
+            edgePadding: { top: 200, right: 60, bottom: 520, left: 60 },
             animated: true,
           });
         }, 300);
@@ -440,7 +588,7 @@ export default function MapBookingScreen({ navigation, route }) {
         setRouteCoords([from, to]); // straight line fallback
         setTimeout(() => {
           mapRef.current?.fitToCoordinates([from, to], {
-            edgePadding: { top: 200, right: 60, bottom: 400, left: 60 },
+            edgePadding: { top: 200, right: 60, bottom: 520, left: 60 },
             animated: true,
           });
         }, 300);
@@ -462,7 +610,7 @@ export default function MapBookingScreen({ navigation, route }) {
       setRouteCoords([from, to]);
       setTimeout(() => {
         mapRef.current?.fitToCoordinates([from, to], {
-          edgePadding: { top: 200, right: 60, bottom: 400, left: 60 },
+          edgePadding: { top: 200, right: 60, bottom: 520, left: 60 },
           animated: true,
         });
       }, 300);
@@ -513,14 +661,57 @@ export default function MapBookingScreen({ navigation, route }) {
     }
   }
 
-  function handleChoose() {
-    navigation.navigate("AmbulanceSelect", {
+  // "Where to?" — ask who the patient is the first time, then open drop search
+  function handleWhereTo() {
+    if (!patientAskedRef.current) {
+      setPatientSheetVisible(true);
+    } else {
+      setSearchVisible(true);
+    }
+  }
+
+  function handlePatientSkip() {
+    patientAskedRef.current = true;
+    setPatientSheetVisible(false);
+    setSearchVisible(true);
+  }
+
+  function handlePatientContinue(value) {
+    patientAskedRef.current = true;
+    setPatientType(value);
+    setPatientSheetVisible(false);
+    setSearchVisible(true);
+  }
+
+  function handlePickNow() {
+    setScheduleType("now");
+    setScheduleTypeVisible(false);
+  }
+
+  function handlePickSchedule() {
+    setScheduleTypeVisible(false);
+    setScheduleDetailVisible(true);
+  }
+
+  function handleConfirmSchedule() {
+    setScheduleType("later");
+    setScheduleDetailVisible(false);
+  }
+
+  // Same param shape AmbulanceSelectScreen.handleNext used to send to ConfirmBooking —
+  // this screen now skips that intermediate screen but preserves its exact contract.
+  function handleConfirmType() {
+    navigation.navigate("ConfirmBooking", {
       pickupLabel,
       dropLabel,
       dist: dist ?? 5,
       duration: duration ?? 1200,
       scheduleType,
       scheduleDate: scheduleType === "later" ? scheduleDate.toISOString() : null,
+      patientType,
+      selectedType: selectedAmbType,
+      selectedAmb: AMBULANCE_TYPES.find(a => a.id === selectedAmbType),
+      pricingList,
     });
   }
 
@@ -537,7 +728,7 @@ export default function MapBookingScreen({ navigation, route }) {
         mapPadding={{
           top: 0,
           right: 0,
-          bottom: hasRoute ? 380 : SHEET_H,
+          bottom: hasRoute ? 500 : SHEET_H,
           left: 0,
         }}
         showsMyLocationButton={false}
@@ -653,32 +844,43 @@ export default function MapBookingScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Phase B — pickup + drop addresses */}
+        {/* Phase B — pickup + drop addresses, with "Now" button alongside */}
         {hasRoute && (
-          <View style={styles.routeCard}>
-            <TouchableOpacity style={styles.routeAddrRow} onPress={clearDrop} activeOpacity={0.75}>
-              <View style={styles.greenDotSm} />
-              <Text style={styles.routeAddrTxt} numberOfLines={1}>{pickupLabel}</Text>
-              <Text style={styles.routeChangeTxt}>Change</Text>
-            </TouchableOpacity>
-            <View style={styles.routeCardSep}>
-              <View style={styles.routeCardLine} />
+          <View style={styles.routeRow}>
+            <View style={styles.routeCard}>
+              <TouchableOpacity style={styles.routeAddrRow} onPress={clearDrop} activeOpacity={0.75}>
+                <View style={styles.greenDotSm} />
+                <Text style={styles.routeAddrTxt} numberOfLines={1}>{pickupLabel}</Text>
+                <Text style={styles.routeChangeTxt}>Change</Text>
+              </TouchableOpacity>
+              <View style={styles.routeCardSep}>
+                <View style={styles.routeCardLine} />
+              </View>
+              <TouchableOpacity
+                style={styles.routeAddrRow}
+                onPress={() => setSearchVisible(true)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.redDotSm} />
+                <Text style={styles.routeAddrTxt} numberOfLines={1}>{dropLabel}</Text>
+                <Text style={styles.routeChangeTxt}>Edit</Text>
+              </TouchableOpacity>
             </View>
+
             <TouchableOpacity
-              style={styles.routeAddrRow}
-              onPress={() => setSearchVisible(true)}
-              activeOpacity={0.75}
+              style={styles.nowBtn}
+              onPress={() => setScheduleTypeVisible(true)}
+              activeOpacity={0.85}
             >
-              <View style={styles.redDotSm} />
-              <Text style={styles.routeAddrTxt} numberOfLines={1}>{dropLabel}</Text>
-              <Text style={styles.routeChangeTxt}>Edit</Text>
+              <Text style={styles.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+              <Text style={styles.nowBtnTxt}>{scheduleType === "later" ? "Sched." : "Now"}</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
       {/* ── Bottom sheet ─────────────────────────────────────────────────── */}
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, hasRoute && styles.sheetExpanded]}>
         <View style={styles.sheetHandle} />
 
         {!hasRoute ? (
@@ -689,7 +891,7 @@ export default function MapBookingScreen({ navigation, route }) {
             </Text>
             <TouchableOpacity
               style={styles.whereToBtn}
-              onPress={() => setSearchVisible(true)}
+              onPress={handleWhereTo}
               activeOpacity={0.88}
             >
               <View style={styles.searchIcoBox}>
@@ -702,49 +904,70 @@ export default function MapBookingScreen({ navigation, route }) {
             </TouchableOpacity>
           </>
         ) : (
-          // ── Phase B: schedule + choose ────────────────────────────────────
+          // ── Phase B: inline ambulance list with calculated prices ────────
           <>
-            {/* Schedule */}
-            <View style={styles.schedSection}>
-              <Text style={styles.schedHeading}>When do you need it?</Text>
-              <View style={styles.schedTabs}>
-                <TouchableOpacity
-                  style={[styles.schedTab, scheduleType === "now" && styles.schedTabActive]}
-                  onPress={() => { setScheduleType("now"); setPickerMode(null); }}
-                >
-                  <Text style={[styles.schedTabTxt, scheduleType === "now" && styles.schedTabTxtActive]}>
-                    🟢  Now
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.schedTab, scheduleType === "later" && styles.schedTabActive]}
-                  onPress={() => setScheduleType("later")}
-                >
-                  <Text style={[styles.schedTabTxt, scheduleType === "later" && styles.schedTabTxtActive]}>
-                    🕐  Schedule
-                  </Text>
-                </TouchableOpacity>
+            <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {AMBULANCE_TYPES.map(amb => {
+                const info     = AMB_RATES[amb.id];
+                const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
+                const isActive = selectedAmbType === amb.id;
+                return (
+                  <TouchableOpacity
+                    key={amb.id}
+                    style={[styles.ambCard, isActive && styles.ambCardActive]}
+                    onPress={() => setSelectedAmbType(amb.id)}
+                    activeOpacity={0.8}
+                  >
+                    {info.badge ? (
+                      <View style={[styles.ambBadge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
+                        <Text style={[styles.ambBadgeTxt, { color: info.color }]}>{info.badge}</Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.ambCardMain}>
+                      <View style={[styles.ambIconBox, isActive && { backgroundColor: COLORS.red + "22" }]}>
+                        <Text style={{ fontSize: 24 }}>{amb.icon}</Text>
+                      </View>
+                      <View style={styles.ambInfo}>
+                        <Text style={styles.ambName}>{amb.name}</Text>
+                        <Text style={styles.ambDesc}>{amb.desc}</Text>
+                        <View style={styles.ambMetaRow}>
+                          <Text style={styles.ambMetaChip}>⏱ ~{info.eta} min</Text>
+                          {info.km ? (
+                            <Text style={styles.ambMetaChip}>₹{info.km}/km</Text>
+                          ) : (
+                            <Text style={styles.ambMetaChip}>Slab pricing</Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.ambPriceCol}>
+                        <Text style={[styles.ambPrice, isActive && { color: COLORS.red }]}>
+                          ₹{est.toLocaleString()}
+                        </Text>
+                        <View style={[styles.ambRadio, isActive && styles.ambRadioActive]}>
+                          {isActive && <View style={styles.ambRadioDot} />}
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={{ height: 8 }} />
+            </ScrollView>
+
+            <View style={styles.confirmFooter}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.footerLabel}>
+                  Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}
+                </Text>
+                <Text style={styles.footerPrice}>
+                  ₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.
+                </Text>
               </View>
-
-              {scheduleType === "later" && (
-                <View style={styles.dateTimeRow}>
-                  <TouchableOpacity style={styles.dtChip} onPress={() => setPickerMode("date")}>
-                    <Text style={styles.dtChipIco}>📅</Text>
-                    <Text style={styles.dtChipTxt}>{fmtDate(scheduleDate)}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.dtChip} onPress={() => setPickerMode("time")}>
-                    <Text style={styles.dtChipIco}>🕐</Text>
-                    <Text style={styles.dtChipTxt}>{fmtTime(scheduleDate)}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirmType} activeOpacity={0.85}>
+                <Text style={styles.confirmBtnTxt}>Confirm Type  →</Text>
+              </TouchableOpacity>
             </View>
-
-            {/* Choose ambulance CTA */}
-            <TouchableOpacity style={styles.chooseBtn} onPress={handleChoose} activeOpacity={0.85}>
-              <Text style={styles.chooseBtnText}>Choose Ambulance</Text>
-              <Text style={styles.chooseBtnArrow}>→</Text>
-            </TouchableOpacity>
           </>
         )}
       </View>
@@ -759,6 +982,31 @@ export default function MapBookingScreen({ navigation, route }) {
           setDropLabel(label);
           setSearchVisible(false);
         }}
+      />
+
+      {/* "Who is the patient?" — asked once, before drop search opens */}
+      <PatientSheet
+        visible={patientSheetVisible}
+        onSkip={handlePatientSkip}
+        onContinue={handlePatientContinue}
+      />
+
+      {/* "Now" vs "Schedule Ambulance" */}
+      <ScheduleTypeSheet
+        visible={scheduleTypeVisible}
+        onClose={() => setScheduleTypeVisible(false)}
+        onPickNow={handlePickNow}
+        onPickSchedule={handlePickSchedule}
+      />
+
+      {/* Schedule date & time */}
+      <ScheduleDetailSheet
+        visible={scheduleDetailVisible}
+        date={scheduleDate}
+        onClose={() => setScheduleDetailVisible(false)}
+        onPickDate={() => setPickerMode("date")}
+        onPickTime={() => setPickerMode("time")}
+        onConfirm={handleConfirmSchedule}
       />
 
       {/* Pure-JS date/time picker */}
@@ -888,13 +1136,25 @@ const styles = StyleSheet.create({
   },
   recenterIco: { color: COLORS.red, fontSize: 20, lineHeight: 22 },
 
-  // Phase B: route addresses card
+  // Phase B: route addresses card + "Now" button alongside
+  routeRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   routeCard: {
+    flex: 1,
     backgroundColor: "rgba(5,6,8,0.92)",
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6,
     borderWidth: 0.5, borderColor: "rgba(255,255,255,0.12)",
     shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 10, elevation: 10,
   },
+  nowBtn: {
+    width: 62,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(5,6,8,0.92)",
+    borderRadius: 16, paddingVertical: 14,
+    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 10, elevation: 10,
+  },
+  nowBtnIco: { fontSize: 18, marginBottom: 4 },
+  nowBtnTxt: { color: COLORS.white, fontSize: 10, fontWeight: "700" },
   routeAddrRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingVertical: 10,
@@ -982,37 +1242,65 @@ const styles = StyleSheet.create({
   },
 
   // Phase B — schedule
-  schedSection: { marginBottom: 12 },
-  schedHeading: {
+  // Phase B: inline ambulance list with calculated prices
+  sheetExpanded: { maxHeight: "64%" },
+  listHeading: {
     color: COLORS.grayDim, fontSize: 11, fontWeight: "700",
-    textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8,
+    letterSpacing: 1.2, marginBottom: 10,
   },
-  schedTabs: { flexDirection: "row", gap: 8 },
-  schedTab: {
-    flex: 1, paddingVertical: 10, alignItems: "center",
-    borderRadius: 10, borderWidth: 0.5,
-    borderColor: "rgba(0,0,0,0.1)",
+  ambCard: {
     backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 16, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)",
+    marginBottom: 10, padding: 12, overflow: "hidden",
   },
-  schedTabActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  schedTabTxt: { color: COLORS.grayDim, fontSize: 13, fontWeight: "600" },
-  schedTabTxtActive: { color: COLORS.white, fontWeight: "700" },
-  dateTimeRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  dtChip: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 6,
+  ambCardActive: {
+    backgroundColor: "rgba(232,25,44,0.07)",
+    borderColor: "rgba(232,25,44,0.45)",
+  },
+  ambBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 6, borderWidth: 0.5,
+    paddingHorizontal: 8, paddingVertical: 3,
+    marginBottom: 8,
+  },
+  ambBadgeTxt: { fontSize: 9, fontWeight: "700", letterSpacing: 0.4 },
+  ambCardMain: { flexDirection: "row", alignItems: "center", gap: 10 },
+  ambIconBox: {
+    width: 48, height: 48, borderRadius: 13,
     backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12,
-    borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)",
+    alignItems: "center", justifyContent: "center",
   },
-  dtChipIco: { fontSize: 14 },
-  dtChipTxt: { color: COLORS.text, fontSize: 12, fontWeight: "600" },
-  chooseBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: COLORS.red, borderRadius: 14,
-    paddingVertical: 16, gap: 10,
+  ambInfo: { flex: 1 },
+  ambName: { color: COLORS.text, fontSize: 14, fontWeight: "700" },
+  ambDesc: { color: COLORS.grayDim, fontSize: 11, marginTop: 1 },
+  ambMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 6 },
+  ambMetaChip: {
+    color: COLORS.grayDim, fontSize: 9,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6,
   },
-  chooseBtnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
-  chooseBtnArrow: { color: COLORS.white, fontSize: 18, fontWeight: "700" },
+  ambPriceCol: { alignItems: "flex-end", gap: 4 },
+  ambPrice: { color: COLORS.text, fontSize: 15, fontWeight: "800" },
+  ambRadio: {
+    width: 18, height: 18, borderRadius: 9,
+    borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
+    alignItems: "center", justifyContent: "center",
+  },
+  ambRadioActive: { borderColor: COLORS.red },
+  ambRadioDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: COLORS.red },
+
+  confirmFooter: {
+    flexDirection: "row", alignItems: "center",
+    paddingTop: 12, gap: 14,
+    borderTopWidth: 0.5, borderTopColor: "rgba(0,0,0,0.08)",
+  },
+  footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
+  footerPrice: { color: COLORS.text, fontSize: 18, fontWeight: "800", marginTop: 2 },
+  confirmBtn: {
+    backgroundColor: COLORS.red,
+    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 18,
+  },
+  confirmBtnTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 });
 
 // ─── Search modal styles ──────────────────────────────────────────────────────
@@ -1110,4 +1398,85 @@ const pk = StyleSheet.create({
     paddingVertical: 15, alignItems: "center",
   },
   confirmTxt: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+});
+
+// ─── Patient / schedule bottom-sheet shell styles ──────────────────────────────
+const bsh = StyleSheet.create({
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  kvWrap: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingHorizontal: 20, paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border, alignSelf: "center", marginBottom: 16,
+  },
+  title: { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
+  subtitle: { fontSize: 12.5, color: COLORS.grayDim, marginBottom: 18 },
+
+  row: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderColor: COLORS.border,
+    borderRadius: 14, padding: 14, marginBottom: 10,
+    backgroundColor: COLORS.bg2,
+  },
+  ico: {
+    width: 42, height: 42, borderRadius: 12,
+    alignItems: "center", justifyContent: "center", marginRight: 12,
+  },
+  rowLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  rowSub: { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
+
+  option: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderColor: COLORS.border,
+    borderRadius: 14, padding: 12, marginBottom: 10,
+    backgroundColor: COLORS.bg2,
+  },
+  optionActive: { borderColor: COLORS.red, backgroundColor: "#fff0f1" },
+  optionIco: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center",
+    marginRight: 12,
+  },
+  optionIcoActive: { backgroundColor: "#fee2e2" },
+  optionLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  optionLabelActive: { color: COLORS.red },
+  optionSub: { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
+
+  radio: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+
+  footerRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  skipBtn: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    borderRadius: 14, paddingVertical: 15,
+    borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  skipTxt: { fontSize: 15, fontWeight: "700", color: COLORS.gray },
+  continueBtn: {
+    flex: 1.4, alignItems: "center", justifyContent: "center",
+    backgroundColor: COLORS.red, borderRadius: 14, paddingVertical: 15,
+    shadowColor: COLORS.red, shadowOpacity: 0.35, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 }, elevation: 6,
+  },
+  continueTxt: { fontSize: 15, fontWeight: "800", color: "#fff" },
+
+  chipRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
+  chip: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: COLORS.bg2, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingVertical: 12, paddingHorizontal: 14,
+  },
+  chipIco: { fontSize: 16 },
+  chipTxt: { fontSize: 13, fontWeight: "700", color: COLORS.text },
 });

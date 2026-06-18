@@ -67,3 +67,4 @@ const styles = StyleSheet.create({
   notifyBtn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   notifyBtnText: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
 });
+

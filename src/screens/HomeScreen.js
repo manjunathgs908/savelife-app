@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useContext } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, Platform, ActivityIndicator, Dimensions,
-  TextInput, FlatList, Modal, KeyboardAvoidingView,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
@@ -75,148 +74,6 @@ async function reverseGeocode(lat, lng) {
     }
   } catch {}
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-}
-
-// ─── Reusable Places search bottom sheet (pickup + drop) ──────────────────────
-function PlacesSearchSheet({ visible, title, onClose, onSelect }) {
-  const [query,       setQuery]       = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const debRef = useRef(null);
-
-  useEffect(() => {
-    if (visible) { setQuery(""); setSuggestions([]); }
-  }, [visible]);
-
-  function onChangeQuery(text) {
-    setQuery(text);
-    clearTimeout(debRef.current);
-    if (text.length < 2) { setSuggestions([]); return; }
-    debRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in`
-        );
-        const data = await res.json();
-        setSuggestions(data.predictions || []);
-      } catch {}
-      setLoading(false);
-    }, 350);
-  }
-
-  async function selectPlace(pred) {
-    try {
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${pred.place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
-      );
-      const data = await res.json();
-      if (data.result?.geometry) {
-        onSelect({
-          coord: {
-            latitude:  data.result.geometry.location.lat,
-            longitude: data.result.geometry.location.lng,
-          },
-          label: data.result.formatted_address || pred.description,
-        });
-      }
-    } catch {}
-  }
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      {/* Dim backdrop — tapping it closes the sheet */}
-      <TouchableOpacity
-        style={sh.backdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      />
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={sh.kvWrap}
-        pointerEvents="box-none"
-      >
-        <View style={sh.sheet}>
-          {/* Drag handle */}
-          <View style={sh.handle} />
-
-          {/* Header row */}
-          <View style={sh.headerRow}>
-            <TouchableOpacity style={sh.backBtn} onPress={onClose} activeOpacity={0.7}>
-              <Text style={sh.backArrow}>←</Text>
-            </TouchableOpacity>
-            <Text style={sh.sheetTitle}>{title}</Text>
-          </View>
-
-          {/* Search input */}
-          <View style={sh.inputRow}>
-            <Text style={sh.searchIco}>🔍</Text>
-            <TextInput
-              style={sh.input}
-              placeholder="Hospital, area or address…"
-              placeholderTextColor={COLORS.grayDim}
-              value={query}
-              onChangeText={onChangeQuery}
-              autoFocus
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => { setQuery(""); setSuggestions([]); }}>
-                <Text style={sh.clearBtn}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Spinner / results */}
-          {loading && (
-            <ActivityIndicator color={COLORS.red} style={{ marginTop: 20 }} />
-          )}
-
-          {!loading && suggestions.length === 0 && query.length >= 2 && (
-            <Text style={sh.emptyTxt}>No results found</Text>
-          )}
-
-          {!loading && query.length < 2 && (
-            <Text style={sh.hintTxt}>Type a hospital, area or address…</Text>
-          )}
-
-          <FlatList
-            data={suggestions}
-            keyExtractor={item => item.place_id}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={sh.row} onPress={() => selectPlace(item)} activeOpacity={0.7}>
-                <View style={sh.rowIco}>
-                  <Text style={{ fontSize: 14 }}>📍</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={sh.rowMain} numberOfLines={1}>
-                    {item.structured_formatting?.main_text || item.description}
-                  </Text>
-                  {item.structured_formatting?.secondary_text ? (
-                    <Text style={sh.rowSub} numberOfLines={1}>
-                      {item.structured_formatting.secondary_text}
-                    </Text>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
 }
 
 // ─── 10 service cards ─────────────────────────────────────────────────────────
@@ -359,16 +216,6 @@ export default function HomeScreen({ navigation }) {
   const [locLoading,      setLocLoading]      = useState(true);
   const [ambulances,      setAmbulances]      = useState([]);
 
-  // Pickup-location inline search (overrides GPS if user manually picks)
-  const [pickupSheetVisible,  setPickupSheetVisible]  = useState(false);
-  const [customPickupCoord,   setCustomPickupCoord]   = useState(null);
-  const [customPickupLabel,   setCustomPickupLabel]   = useState("");
-
-  // Drop-location inline search
-  const [dropSheetVisible, setDropSheetVisible] = useState(false);
-  const [dropLabel,        setDropLabel]        = useState("");
-  const [dropCoord,        setDropCoord]        = useState(null);
-
   const coordRef   = useRef(null);
   const mapRef     = useRef(null);
   const ambCreated = useRef(false);
@@ -422,11 +269,6 @@ export default function HomeScreen({ navigation }) {
   }, [ambulances.length]);
 
   const nearest = ambulances.find(a => a.type === "BLS") ?? ambulances[0];
-
-  // Effective pickup = manually chosen location, else GPS
-  const effectivePickupCoord = customPickupCoord ?? userCoord;
-  const effectivePickupLabel = customPickupLabel || userLabel;
-  const bothSelected = !!(effectivePickupCoord && dropCoord);
 
   return (
     <View style={styles.root}>
@@ -530,51 +372,6 @@ export default function HomeScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
       >
 
-        {/* ── Location card — slides OVERLAP px over the map bottom ─────────── */}
-        <View style={styles.locCard}>
-
-          {/* Pickup row — opens inline search sheet */}
-          <TouchableOpacity
-            style={styles.locRow}
-            onPress={() => setPickupSheetVisible(true)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.dotGreen} />
-            <View style={styles.locTexts}>
-              <Text style={styles.locTitle}>Pickup Location</Text>
-              <Text style={styles.locSubTxt} numberOfLines={1}>
-                {locLoading ? "Getting your location…" : (effectivePickupLabel || "Your current location")}
-              </Text>
-            </View>
-            <View style={styles.locBtn}>
-              <Text style={{ fontSize: 17 }}>{customPickupLabel ? "✅" : "🎯"}</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.locDivider} />
-
-          {/* Drop row — opens inline bottom sheet, no navigation */}
-          <TouchableOpacity
-            style={styles.locRow}
-            onPress={() => setDropSheetVisible(true)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.dotRed}>
-              <Text style={{ color: "#fff", fontSize: 9 }}>▼</Text>
-            </View>
-            <View style={styles.locTexts}>
-              <Text style={styles.locTitle}>Drop Location</Text>
-              <Text style={styles.locSubTxt} numberOfLines={1}>
-                {dropLabel || "Search hospital or location"}
-              </Text>
-            </View>
-            <View style={styles.locBtn}>
-              <Text style={{ fontSize: 17 }}>{dropLabel ? "✅" : "📋"}</Text>
-            </View>
-          </TouchableOpacity>
-
-        </View>
-
         {/* ── Our Services ──────────────────────────────────────────────────── */}
         <View style={styles.svcSection}>
 
@@ -612,46 +409,6 @@ export default function HomeScreen({ navigation }) {
 
         </View>
       </ScrollView>
-
-      {/* ═══════════════ FIND AMBULANCE CTA ═══════════════════════════════════ */}
-      {bothSelected && (
-        <View style={styles.findAmbWrap}>
-          <TouchableOpacity
-            style={styles.findAmbBtn}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate("MapBooking", {
-              pickupCoord: effectivePickupCoord,
-              pickupLabel: effectivePickupLabel,
-              dropCoord,
-              dropLabel,
-            })}
-          >
-            <Text style={styles.findAmbTxt}>Find Ambulance  →</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ═════════════════════════ INLINE SEARCH SHEETS ═══════════════════════ */}
-      <PlacesSearchSheet
-        visible={pickupSheetVisible}
-        title="Pickup Location"
-        onClose={() => setPickupSheetVisible(false)}
-        onSelect={({ coord, label }) => {
-          setCustomPickupCoord(coord);
-          setCustomPickupLabel(label);
-          setPickupSheetVisible(false);
-        }}
-      />
-      <PlacesSearchSheet
-        visible={dropSheetVisible}
-        title="Drop Location"
-        onClose={() => setDropSheetVisible(false)}
-        onSelect={({ coord, label }) => {
-          setDropCoord(coord);
-          setDropLabel(label);
-          setDropSheetVisible(false);
-        }}
-      />
 
     </View>
   );
@@ -817,45 +574,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.bg },
   scrollContent: { paddingBottom: 36 },
 
-  // ══ LOCATION CARD ═══════════════════════════════════════════════════════════
-  locCard: {
-    marginHorizontal: 16,
-    marginTop: -OVERLAP,        // slides OVERLAP px up over the map bottom
-    backgroundColor: COLORS.bg,
-    borderRadius: 18,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.11, shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
-    marginBottom: 20,
-    borderWidth: 0.5, borderColor: COLORS.border,
-  },
-  locRow: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
-  },
-  dotGreen: {
-    width: 13, height: 13, borderRadius: 6.5,
-    backgroundColor: "#22c55e", flexShrink: 0,
-  },
-  dotRed: {
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: COLORS.red,
-    alignItems: "center", justifyContent: "center", flexShrink: 0,
-  },
-  locTexts: { flex: 1 },
-  locTitle:  { color: COLORS.text, fontSize: 13, fontWeight: "600" },
-  locSubTxt: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
-  locBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: COLORS.bg3,
-    alignItems: "center", justifyContent: "center",
-  },
-  locDivider: { height: 0.5, backgroundColor: COLORS.border, marginHorizontal: 16 },
-
   // ══ SERVICES SECTION ════════════════════════════════════════════════════════
-  svcSection: { paddingHorizontal: SIDE_PAD },
+  svcSection: { paddingHorizontal: SIDE_PAD, paddingTop: 16 },
   svcHeader: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     marginBottom: 12,
@@ -961,107 +681,4 @@ const styles = StyleSheet.create({
     color: COLORS.red, fontSize: 7.5, fontWeight: "800",
     letterSpacing: 0.3, marginTop: 2,
   },
-
-  // ── Find Ambulance CTA ───────────────────────────────────────────────────────
-  findAmbWrap: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: COLORS.bg,
-    borderTopWidth: 0.5,
-    borderTopColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.06, shadowRadius: 8,
-    shadowOffset: { width: 0, height: -3 },
-    elevation: 6,
-  },
-  findAmbBtn: {
-    backgroundColor: COLORS.red,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: "center",
-    shadowColor: COLORS.red,
-    shadowOpacity: 0.38, shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  findAmbTxt: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-});
-
-// ─── Drop-search bottom-sheet styles ─────────────────────────────────────────
-const sh = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  kvWrap: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingTop: 10,
-    paddingHorizontal: 16,
-    paddingBottom: Platform.OS === "ios" ? 42 : 24,
-    maxHeight: "82%",
-    shadowColor: "#000",
-    shadowOpacity: 0.18, shadowRadius: 24,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 24,
-  },
-  handle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.border,
-    alignSelf: "center", marginBottom: 14,
-  },
-  headerRow: {
-    flexDirection: "row", alignItems: "center", marginBottom: 14,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: COLORS.bg3,
-    alignItems: "center", justifyContent: "center",
-    marginRight: 10,
-  },
-  backArrow: { fontSize: 20, color: COLORS.text, lineHeight: 22 },
-  sheetTitle: {
-    fontSize: 17, fontWeight: "700", color: COLORS.text,
-  },
-  inputRow: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.bg2,
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1, borderColor: COLORS.border,
-    marginBottom: 10,
-  },
-  searchIco: { fontSize: 16, marginRight: 8, opacity: 0.5 },
-  input: {
-    flex: 1, fontSize: 15, color: COLORS.text,
-  },
-  clearBtn: { fontSize: 14, color: COLORS.grayDim, paddingHorizontal: 4 },
-  emptyTxt: {
-    color: COLORS.grayDim, fontSize: 14, textAlign: "center", marginTop: 24,
-  },
-  hintTxt: {
-    color: COLORS.grayDim, fontSize: 13, textAlign: "center", marginTop: 24,
-  },
-  row: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
-  },
-  rowIco: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: COLORS.bg3,
-    alignItems: "center", justifyContent: "center",
-    marginRight: 12,
-  },
-  rowMain: { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  rowSub:  { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
 });
