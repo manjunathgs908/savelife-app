@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView,
+  View, Text, TouchableOpacity, ScrollView, Modal,
   StyleSheet, Platform, ActivityIndicator, Dimensions,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
@@ -84,7 +84,7 @@ async function reverseGeocode(lat, lng) {
 //  Row 4 → Standby (1 col) · Promo banner (2 cols)
 const SERVICES = [
   { icon: "🚑", label: "Emergency\nAmbulance", subtitle: "Fastest Response",
-    screen: "MapBooking",     bg: "#e8192c", light: false, popular: true,
+    screen: "BookingFlow",    bg: "#e8192c", light: false, popular: true,
     gloss: "rgba(255,255,255,0.26)" },
   { icon: "📅", label: "Schedule\nAmbulance",  subtitle: "Book in Advance",
     screen: "Schedule",       bg: "#1a56db", light: false, popular: false,
@@ -207,6 +207,65 @@ function PromoCard() {
   );
 }
 
+// ─── "Who is the patient?" bottom sheet — first step of the booking flow ──────
+const PATIENT_OPTIONS = [
+  { id: "myself",  icon: "🧍", label: "Myself",          sub: "Booking for yourself" },
+  { id: "another", icon: "👥", label: "Another Patient", sub: "Booking for someone else" },
+];
+
+function PatientSheet({ visible, onSkip, onContinue }) {
+  const [selected, setSelected] = useState("myself");
+
+  useEffect(() => {
+    if (visible) setSelected("myself");
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onSkip}>
+      <TouchableOpacity style={pst.overlay} activeOpacity={1} onPress={onSkip} />
+      <View style={pst.kvWrap} pointerEvents="box-none">
+        <View style={pst.sheet}>
+          <View style={pst.handle} />
+          <Text style={pst.title}>Who is the patient?</Text>
+          <Text style={pst.subtitle}>This helps us prepare the right assistance</Text>
+
+          {PATIENT_OPTIONS.map(opt => {
+            const active = selected === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[pst.option, active && pst.optionActive]}
+                onPress={() => setSelected(opt.id)}
+                activeOpacity={0.75}
+              >
+                <View style={[pst.optionIco, active && pst.optionIcoActive]}>
+                  <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[pst.optionLabel, active && pst.optionLabelActive]}>{opt.label}</Text>
+                  <Text style={pst.optionSub}>{opt.sub}</Text>
+                </View>
+                <View style={[pst.radio, active && pst.radioActive]}>
+                  {active && <View style={pst.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          <View style={pst.footerRow}>
+            <TouchableOpacity style={pst.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+              <Text style={pst.skipTxt}>Skip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={pst.continueBtn} onPress={() => onContinue(selected)} activeOpacity={0.85}>
+              <Text style={pst.continueTxt}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
   useContext(AppContext);
@@ -215,6 +274,9 @@ export default function HomeScreen({ navigation }) {
   const [userLabel,       setUserLabel]       = useState("Getting location…");
   const [locLoading,      setLocLoading]      = useState(true);
   const [ambulances,      setAmbulances]      = useState([]);
+
+  // First step of the Ola-style booking flow — "Who is the patient?"
+  const [patientSheetVisible, setPatientSheetVisible] = useState(false);
 
   const coordRef   = useRef(null);
   const mapRef     = useRef(null);
@@ -269,6 +331,23 @@ export default function HomeScreen({ navigation }) {
   }, [ambulances.length]);
 
   const nearest = ambulances.find(a => a.type === "BLS") ?? ambulances[0];
+
+  // ── Booking flow entry point — tapping the search bar or the Emergency
+  //    Ambulance card both start here. GPS is already being detected by the
+  //    effect above; we just hand whatever we currently have to the sheet.
+  function startBookingFlow() {
+    setPatientSheetVisible(true);
+  }
+
+  function goToPickupSearch(patientType) {
+    setPatientSheetVisible(false);
+    navigation.navigate("LocationSearch", {
+      mode: "pickup",
+      gpsCoord: userCoord,
+      gpsLabel: userLabel,
+      patientType,
+    });
+  }
 
   return (
     <View style={styles.root}>
@@ -375,7 +454,7 @@ export default function HomeScreen({ navigation }) {
         {/* ── Main booking search bar — slides up over the map bottom ───────── */}
         <TouchableOpacity
           style={styles.searchBarWrap}
-          onPress={() => navigation.navigate("MapBooking")}
+          onPress={startBookingFlow}
           activeOpacity={0.85}
         >
           <View style={styles.searchBarIcoWrap}>
@@ -407,7 +486,10 @@ export default function HomeScreen({ navigation }) {
                   <ServiceCard
                     key={svc.label}
                     svc={svc}
-                    onPress={() => navigation.navigate(svc.screen)}
+                    onPress={() => svc.screen === "BookingFlow"
+                      ? startBookingFlow()
+                      : navigation.navigate(svc.screen)
+                    }
                   />
                 ))}
               </View>
@@ -426,6 +508,13 @@ export default function HomeScreen({ navigation }) {
 
         </View>
       </ScrollView>
+
+      {/* "Who is the patient?" — first step of the booking flow */}
+      <PatientSheet
+        visible={patientSheetVisible}
+        onSkip={() => goToPickupSearch(null)}
+        onContinue={(value) => goToPickupSearch(value)}
+      />
 
     </View>
   );
@@ -727,4 +816,62 @@ const styles = StyleSheet.create({
     color: COLORS.red, fontSize: 7.5, fontWeight: "800",
     letterSpacing: 0.3, marginTop: 2,
   },
+});
+
+// ─── "Who is the patient?" sheet styles ───────────────────────────────────────
+const pst = StyleSheet.create({
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  kvWrap: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingHorizontal: 20, paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border, alignSelf: "center", marginBottom: 16,
+  },
+  title: { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
+  subtitle: { fontSize: 12.5, color: COLORS.grayDim, marginBottom: 18 },
+
+  option: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderColor: COLORS.border,
+    borderRadius: 14, padding: 12, marginBottom: 10,
+    backgroundColor: COLORS.bg2,
+  },
+  optionActive: { borderColor: COLORS.red, backgroundColor: "#fff0f1" },
+  optionIco: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center",
+    marginRight: 12,
+  },
+  optionIcoActive: { backgroundColor: "#fee2e2" },
+  optionLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  optionLabelActive: { color: COLORS.red },
+  optionSub: { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
+
+  radio: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+
+  footerRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  skipBtn: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    borderRadius: 14, paddingVertical: 15,
+    borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  skipTxt: { fontSize: 15, fontWeight: "700", color: COLORS.gray },
+  continueBtn: {
+    flex: 1.4, alignItems: "center", justifyContent: "center",
+    backgroundColor: COLORS.red, borderRadius: 14, paddingVertical: 15,
+    shadowColor: COLORS.red, shadowOpacity: 0.35, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 }, elevation: 6,
+  },
+  continueTxt: { fontSize: 15, fontWeight: "800", color: "#fff" },
 });
