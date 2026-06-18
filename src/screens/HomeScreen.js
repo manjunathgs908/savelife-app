@@ -754,9 +754,12 @@ export default function HomeScreen({ navigation }) {
               </View>
             </TouchableOpacity>
 
-            <Text style={styles.pickupHint} numberOfLines={1}>
-              📍 Pickup: {locLoading ? "Getting your location…" : userLabel}
-            </Text>
+            <View style={styles.pickupHintRow}>
+              <View style={styles.dotGreen} />
+              <Text style={styles.pickupHintTxt} numberOfLines={1}>
+                {locLoading ? "Getting your location…" : userLabel}
+              </Text>
+            </View>
           </>
         ) : (
           <View style={styles.routeCardWrap}>
@@ -1036,10 +1039,11 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   searchBarArrowTxt: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  pickupHint: {
-    color: COLORS.grayDim, fontSize: 12, fontWeight: "500",
-    marginHorizontal: 16, marginBottom: 20,
+  pickupHintRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 16, marginBottom: 20, paddingLeft: 4,
   },
+  pickupHintTxt: { color: COLORS.grayDim, fontSize: 12, fontWeight: "500", flexShrink: 1 },
 
   // ── Route card (shown once drop is selected) + Find Ambulance button ────────
   routeCardWrap: { marginHorizontal: 16, marginTop: -OVERLAP, marginBottom: 20 },
