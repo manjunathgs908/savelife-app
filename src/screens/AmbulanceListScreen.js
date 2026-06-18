@@ -232,7 +232,7 @@ function DateTimePickerModal({ visible, mode, value, onConfirm, onClose }) {
 
 // ─── Main screen — Now/Schedule + ambulance list with calculated prices ───────
 export default function AmbulanceListScreen({ navigation, route }) {
-  const { pickupCoord, pickupLabel, dropCoord, dropLabel, patientType } = route.params;
+  const { pickupCoord, pickupLabel, dropCoord, dropLabel, patientType, contactName, contactPhone } = route.params;
 
   const [dist, setDist]         = useState(null);
   const [duration, setDuration] = useState(null);
@@ -324,6 +324,8 @@ export default function AmbulanceListScreen({ navigation, route }) {
       scheduleType,
       scheduleDate: scheduleType === "later" ? scheduleDate.toISOString() : null,
       patientType,
+      contactName,
+      contactPhone,
       selectedType: selectedAmbType,
       selectedAmb: AMBULANCE_TYPES.find(a => a.id === selectedAmbType),
       pricingList,

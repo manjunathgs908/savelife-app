@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, TextInput, FlatList,
-  StyleSheet, Platform, ActivityIndicator,
+  StyleSheet, Platform, ActivityIndicator, Modal,
 } from "react-native";
 import * as Location from "expo-location";
+import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
 
@@ -33,9 +34,99 @@ async function reverseGeocode(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
+// ─── Native system contact picker — no broad contacts permission needed ──────
+async function pickContact() {
+  try {
+    const contact = await Contacts.presentContactPickerAsync();
+    if (!contact) return null;
+    return {
+      name:  contact.name || "Contact",
+      phone: contact.phoneNumbers?.[0]?.number ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── "Who should the driver contact?" — mandatory, shown only when the user
+//     changes Pickup away from their auto-detected GPS location ─────────────
+function ContactSheet({ visible, onContinue }) {
+  const [selection, setSelection] = useState({ type: "myself", name: null, phone: null });
+
+  useEffect(() => {
+    if (visible) setSelection({ type: "myself", name: null, phone: null });
+  }, [visible]);
+
+  async function handleChooseContact() {
+    const picked = await pickContact();
+    if (picked) setSelection({ type: "contact", name: picked.name, phone: picked.phone });
+  }
+
+  const isContact = selection.type === "contact";
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => {}}>
+      <View style={cst.overlay} />
+      <View style={cst.kvWrap} pointerEvents="box-none">
+        <View style={cst.sheet}>
+          <View style={cst.handle} />
+          <Text style={cst.title}>Who should the driver contact?</Text>
+          <Text style={cst.subtitle}>
+            You changed the pickup location — let us know who to reach there
+          </Text>
+
+          <TouchableOpacity
+            style={[cst.option, !isContact && cst.optionActive]}
+            onPress={() => setSelection({ type: "myself", name: null, phone: null })}
+            activeOpacity={0.75}
+          >
+            <View style={[cst.optionIco, !isContact && cst.optionIcoActive]}>
+              <Text style={{ fontSize: 20 }}>🧍</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[cst.optionLabel, !isContact && cst.optionLabelActive]}>Myself</Text>
+              <Text style={cst.optionSub}>Driver will contact you</Text>
+            </View>
+            <View style={[cst.radio, !isContact && cst.radioActive]}>
+              {!isContact && <View style={cst.radioDot} />}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[cst.option, isContact && cst.optionActive]}
+            onPress={handleChooseContact}
+            activeOpacity={0.75}
+          >
+            <View style={[cst.optionIco, isContact && cst.optionIcoActive]}>
+              <Text style={{ fontSize: 20 }}>👥</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[cst.optionLabel, isContact && cst.optionLabelActive]}>
+                Choose Another Contact
+              </Text>
+              <Text style={cst.optionSub} numberOfLines={1}>
+                {isContact
+                  ? `${selection.name}${selection.phone ? " · " + selection.phone : ""}`
+                  : "Pick someone from your contacts"}
+              </Text>
+            </View>
+            <View style={[cst.radio, isContact && cst.radioActive]}>
+              {isContact && <View style={cst.radioDot} />}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={cst.continueBtn} onPress={() => onContinue(selection)} activeOpacity={0.85}>
+            <Text style={cst.continueTxt}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Ola-style searchable location list — shared by Pickup and Drop steps ─────
 export default function LocationSearchScreen({ navigation, route }) {
-  const { mode, patientType } = route.params;
+  const { mode, patientType, contactName, contactPhone } = route.params;
   const isPickup = mode === "pickup";
   const recentKey = isPickup ? PICKUP_RECENT_KEY : DROP_RECENT_KEY;
   const title = isPickup ? "Pickup Location" : "Drop Location";
@@ -57,6 +148,10 @@ export default function LocationSearchScreen({ navigation, route }) {
   const [hospitals,    setHospitals]    = useState([]);
   const [hospsLoading, setHospsLoading] = useState(false);
   const [recents,      setRecents]      = useState([]);
+
+  // Shown only in pickup mode, only when the chosen pickup differs from GPS
+  const [contactSheetVisible, setContactSheetVisible] = useState(false);
+  const [pendingPickup,       setPendingPickup]       = useState(null);
 
   const debRef = useRef(null);
   const anchorCoord = isPickup ? gpsCoord : seedCoord;
@@ -195,13 +290,16 @@ export default function LocationSearchScreen({ navigation, route }) {
   }
 
   // ── Confirming a location moves to the next step of the flow ─────────────
-  function proceed(coord, label) {
+  // contactInfo is only meaningful in pickup mode — { type, name, phone }
+  function proceed(coord, label, contactInfo) {
     if (isPickup) {
       navigation.navigate("LocationSearch", {
         mode: "drop",
         pickupCoord: coord,
         pickupLabel: label,
-        patientType,
+        patientType:  contactInfo?.type ?? "myself",
+        contactName:  contactInfo?.name ?? null,
+        contactPhone: contactInfo?.phone ?? null,
       });
     } else {
       navigation.navigate("AmbulanceList", {
@@ -210,13 +308,35 @@ export default function LocationSearchScreen({ navigation, route }) {
         dropCoord:   coord,
         dropLabel:   label,
         patientType,
+        contactName,
+        contactPhone,
       });
     }
   }
 
+  // Picking the auto-detected GPS location is NOT "changing" pickup —
+  // proceed straight through as "Myself", no contact sheet.
   function handleSelectCurrentLocation() {
     if (!gpsCoord) return;
-    proceed(gpsCoord, gpsLabel);
+    proceed(gpsCoord, gpsLabel, { type: "myself", name: null, phone: null });
+  }
+
+  // Any other pickup selection IS a change away from GPS — ask who to contact.
+  function requestPickupConfirmation(coord, label) {
+    if (isPickup) {
+      setPendingPickup({ coord, label });
+      setContactSheetVisible(true);
+    } else {
+      proceed(coord, label);
+    }
+  }
+
+  function handleContactContinue(selection) {
+    setContactSheetVisible(false);
+    if (pendingPickup) {
+      proceed(pendingPickup.coord, pendingPickup.label, selection);
+      setPendingPickup(null);
+    }
   }
 
   async function handleSelectPrediction(pred) {
@@ -228,22 +348,22 @@ export default function LocationSearchScreen({ navigation, route }) {
         sublabel: pred.structured_formatting?.secondary_text || "",
         coord:    result.coord,
       });
-      proceed(result.coord, result.label);
+      requestPickupConfirmation(result.coord, result.label);
     } catch {}
   }
 
   async function handleSelectHospital(h) {
     await pushToRecents({ place_id: h.place_id, label: h.name, sublabel: h.vicinity, coord: h.coord });
-    proceed(h.coord, `${h.name}${h.vicinity ? ", " + h.vicinity : ""}`);
+    requestPickupConfirmation(h.coord, `${h.name}${h.vicinity ? ", " + h.vicinity : ""}`);
   }
 
   async function handleSelectRecent(r) {
     if (r.coord) {
-      proceed(r.coord, r.label);
+      requestPickupConfirmation(r.coord, r.label);
     } else {
       try {
         const result = await fetchPlaceDetails(r.place_id, r.label);
-        proceed(result.coord, result.label);
+        requestPickupConfirmation(result.coord, result.label);
       } catch {}
     }
   }
@@ -416,6 +536,13 @@ export default function LocationSearchScreen({ navigation, route }) {
           contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 24 }}
         />
       )}
+
+      {isPickup && (
+        <ContactSheet
+          visible={contactSheetVisible}
+          onContinue={handleContactContinue}
+        />
+      )}
     </View>
   );
 }
@@ -482,4 +609,56 @@ const s = StyleSheet.create({
   emptyIco:   { fontSize: 36, marginBottom: 12 },
   emptyTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 6 },
   emptySub:   { fontSize: 13, color: COLORS.grayDim, textAlign: "center" },
+});
+
+// ─── "Who should the driver contact?" sheet styles ─────────────────────────────
+const cst = StyleSheet.create({
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  kvWrap: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingHorizontal: 20, paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border, alignSelf: "center", marginBottom: 16,
+  },
+  title: { fontSize: 18, fontWeight: "800", color: COLORS.text, marginBottom: 4 },
+  subtitle: { fontSize: 12.5, color: COLORS.grayDim, marginBottom: 18 },
+
+  option: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderColor: COLORS.border,
+    borderRadius: 14, padding: 12, marginBottom: 10,
+    backgroundColor: COLORS.bg2,
+  },
+  optionActive: { borderColor: COLORS.red, backgroundColor: "#fff0f1" },
+  optionIco: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center",
+    marginRight: 12,
+  },
+  optionIcoActive: { backgroundColor: "#fee2e2" },
+  optionLabel: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  optionLabelActive: { color: COLORS.red },
+  optionSub: { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
+
+  radio: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+
+  continueBtn: {
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: COLORS.red, borderRadius: 14, paddingVertical: 16,
+    marginTop: 8,
+    shadowColor: COLORS.red, shadowOpacity: 0.35, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 }, elevation: 6,
+  },
+  continueTxt: { fontSize: 15, fontWeight: "800", color: "#fff" },
 });

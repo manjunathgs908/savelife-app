@@ -56,6 +56,12 @@
         {
           "locationWhenInUsePermission": "SaveLife needs your location to show your pickup point on the map."
         }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "SaveLife needs access to your contacts so you can pick someone for the driver to call."
+        }
       ]
     ],
     "runtimeVersion": {
