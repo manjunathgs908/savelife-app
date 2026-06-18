@@ -372,6 +372,23 @@ export default function HomeScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
       >
 
+        {/* ── Main booking search bar — slides up over the map bottom ───────── */}
+        <TouchableOpacity
+          style={styles.searchBarWrap}
+          onPress={() => navigation.navigate("MapBooking")}
+          activeOpacity={0.85}
+        >
+          <View style={styles.searchBarIcoWrap}>
+            <Text style={styles.searchBarIco}>🔍</Text>
+          </View>
+          <Text style={styles.searchBarTxt} numberOfLines={1}>
+            Where should we send the ambulance?
+          </Text>
+          <View style={styles.searchBarArrow}>
+            <Text style={styles.searchBarArrowTxt}>→</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* ── Our Services ──────────────────────────────────────────────────── */}
         <View style={styles.svcSection}>
 
@@ -574,8 +591,37 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.bg },
   scrollContent: { paddingBottom: 36 },
 
+  // ══ MAIN BOOKING SEARCH BAR ═════════════════════════════════════════════════
+  searchBarWrap: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    marginHorizontal: 16,
+    marginTop: -OVERLAP,        // slides OVERLAP px up over the map bottom
+    marginBottom: 20,
+    backgroundColor: COLORS.bg,
+    borderRadius: 18,
+    paddingHorizontal: 16, paddingVertical: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.11, shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+    borderWidth: 0.5, borderColor: COLORS.border,
+  },
+  searchBarIcoWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "#fff0f1",
+    alignItems: "center", justifyContent: "center",
+  },
+  searchBarIco: { fontSize: 17 },
+  searchBarTxt: { flex: 1, color: COLORS.gray, fontSize: 14, fontWeight: "600" },
+  searchBarArrow: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: COLORS.red,
+    alignItems: "center", justifyContent: "center",
+  },
+  searchBarArrowTxt: { color: "#fff", fontSize: 15, fontWeight: "800" },
+
   // ══ SERVICES SECTION ════════════════════════════════════════════════════════
-  svcSection: { paddingHorizontal: SIDE_PAD, paddingTop: 16 },
+  svcSection: { paddingHorizontal: SIDE_PAD },
   svcHeader: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     marginBottom: 12,
