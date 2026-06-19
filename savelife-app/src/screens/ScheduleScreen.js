@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Switch, Alert, FlatList, ActivityIndicator, Modal, Platform,
 } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
@@ -101,6 +102,21 @@ async function fetchPlaceDetails(place_id, fallbackLabel) {
     },
     label: data.result.formatted_address || fallbackLabel,
   };
+}
+
+function decodePolyline(encoded) {
+  const pts = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return pts;
 }
 
 // ─── Pure-JS date/time wheel picker (ported from DestinationScreen.js) ───────
@@ -215,6 +231,10 @@ export default function ScheduleScreen({ navigation }) {
   const [dropPhase,  setDropPhase]  = useState("idle");
   const dropDebRef = useRef(null);
 
+  const [routeCoords,   setRouteCoords]   = useState([]);
+  const [durationText,  setDurationText]  = useState(null);
+  const mapRef = useRef(null);
+
   const [tripType,   setTripType]   = useState("One Way");
   const [returnTime, setReturnTime] = useState("");
   const [purpose,    setPurpose]    = useState(null);
@@ -266,7 +286,7 @@ export default function ScheduleScreen({ navigation }) {
 
   // ── Distance between pickup & drop once both are set ──
   useEffect(() => {
-    if (!pickupCoord || !dropCoord) { setDist(null); return; }
+    if (!pickupCoord || !dropCoord) { setDist(null); setDurationText(null); setRouteCoords([]); return; }
 
     function haversineFallback() {
       const R = 6371;
@@ -279,6 +299,8 @@ export default function ScheduleScreen({ navigation }) {
         Math.sin(dLng / 2) ** 2;
       const km = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       setDist(parseFloat(km.toFixed(1)));
+      setDurationText(`${Math.round((km / 30) * 60)} min`);
+      setRouteCoords([pickupCoord, dropCoord]); // straight-line fallback
     }
 
     setDistLoading(true);
@@ -292,7 +314,10 @@ export default function ScheduleScreen({ navigation }) {
         const r = await fetch(url);
         const d = await r.json();
         if (d.routes?.length) {
-          setDist(d.routes[0].legs[0].distance.value / 1000);
+          const leg = d.routes[0].legs[0];
+          setDist(leg.distance.value / 1000);
+          setDurationText(leg.duration.text || `${Math.round(leg.duration.value / 60)} min`);
+          setRouteCoords(decodePolyline(d.routes[0].overview_polyline.points));
         } else {
           haversineFallback();
         }
@@ -302,6 +327,18 @@ export default function ScheduleScreen({ navigation }) {
         setDistLoading(false);
       }
     })();
+  }, [pickupCoord, dropCoord]);
+
+  // ── Fit the map to show both pickup and drop once the route is known ──────
+  useEffect(() => {
+    if (!pickupCoord || !dropCoord) return;
+    const t = setTimeout(() => {
+      mapRef.current?.fitToCoordinates([pickupCoord, dropCoord], {
+        edgePadding: { top: 30, right: 30, bottom: 30, left: 30 },
+        animated: true,
+      });
+    }, 300);
+    return () => clearTimeout(t);
   }, [pickupCoord, dropCoord]);
 
   function onChangePickupQuery(text) {
@@ -510,6 +547,65 @@ export default function ScheduleScreen({ navigation }) {
                   </TouchableOpacity>
                 ))}
               </View>
+            )}
+
+            {pickupCoord && dropCoord && (
+              <>
+                <MapView
+                  ref={mapRef}
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: pickupCoord.latitude,
+                    longitude: pickupCoord.longitude,
+                    latitudeDelta: 0.06,
+                    longitudeDelta: 0.06,
+                  }}
+                  showsMyLocationButton={false}
+                  showsCompass={false}
+                  toolbarEnabled={false}
+                >
+                  <Marker coordinate={pickupCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                    <View style={styles.pickupMarker} />
+                  </Marker>
+                  <Marker coordinate={dropCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+                    <View style={styles.dropMarker} />
+                  </Marker>
+                  {routeCoords.length > 0 && (
+                    <Polyline
+                      coordinates={routeCoords}
+                      strokeColor={COLORS.red}
+                      strokeWidth={4}
+                      lineCap="round"
+                      lineJoin="round"
+                    />
+                  )}
+                </MapView>
+
+                <View style={styles.routeInfoCard}>
+                  <View style={styles.routeEndpoint}>
+                    <View style={styles.greenDotSm} />
+                    <Text style={styles.routeAddr} numberOfLines={1}>{pickupQuery}</Text>
+                  </View>
+                  <View style={styles.routeMid}>
+                    <View style={styles.routeLine} />
+                    <View style={styles.routeDistPill}>
+                      {distLoading ? (
+                        <ActivityIndicator size="small" color={COLORS.red} />
+                      ) : (
+                        <Text style={styles.routeDistTxt}>
+                          {dist?.toFixed(1)} km{durationText ? ` · ~${durationText}` : ""}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.routeLine} />
+                  </View>
+                  <View style={styles.routeEndpoint}>
+                    <View style={styles.redDotSm} />
+                    <Text style={styles.routeAddr} numberOfLines={1}>{dropQuery}</Text>
+                  </View>
+                </View>
+              </>
             )}
 
             <Text style={styles.fieldLabel}>Trip type</Text>
@@ -735,6 +831,33 @@ const styles = StyleSheet.create({
   predRow: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.06)" },
   predMain: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
   predSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
+
+  // Route preview map (ported from DestinationScreen.js, compact for a form screen)
+  map: { width: "100%", height: 170, borderRadius: 14, marginTop: 4, marginBottom: 10 },
+  pickupMarker: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.green, borderWidth: 3, borderColor: "#fff",
+  },
+  dropMarker: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.red, borderWidth: 3, borderColor: "#fff",
+  },
+  routeInfoCard: {
+    backgroundColor: COLORS.bg2, borderRadius: 14, borderWidth: 0.5, borderColor: COLORS.border,
+    padding: 12, gap: 8, marginBottom: 14,
+  },
+  routeEndpoint: { flexDirection: "row", alignItems: "center", gap: 10 },
+  greenDotSm: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.green },
+  redDotSm:   { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
+  routeAddr: { flex: 1, color: COLORS.text, fontSize: 12, fontWeight: "500" },
+  routeMid: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 4 },
+  routeLine: { flex: 1, height: 0.5, backgroundColor: COLORS.border },
+  routeDistPill: {
+    backgroundColor: COLORS.bg3,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100,
+    minWidth: 80, alignItems: "center",
+  },
+  routeDistTxt: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
 
   // Purpose / org chips
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
