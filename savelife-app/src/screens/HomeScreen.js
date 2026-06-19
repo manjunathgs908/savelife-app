@@ -99,7 +99,7 @@ const SERVICES = [
     screen: "FreezerBox",     bg: "#6d28d9", light: false, popular: false,
     gloss: "rgba(255,255,255,0.20)" },
   { icon: "⚰️", label: "Dead Body\nTransport",  subtitle: "Dignified Service",
-    screen: "Remains",        bg: "#ea580c", light: false, popular: false,
+    screen: "BookingFlow",    bg: "#ea580c", light: false, popular: false,
     gloss: "rgba(255,255,255,0.22)" },
   { icon: "🎪", label: "Event\nAmbulance",       subtitle: "Events & Occasions",
     screen: "EventAmbulance", bg: "#d97706", light: false, popular: false,
