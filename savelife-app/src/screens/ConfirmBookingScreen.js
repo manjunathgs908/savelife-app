@@ -132,9 +132,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <Text style={styles.ambName}>{amb.name} Ambulance</Text>
             <Text style={styles.ambDesc}>{info.label}</Text>
           </View>
-          <View style={styles.ambRate}>
-            <Text style={styles.ambRateTxt}>{base === 0 ? "Slab pricing" : `₹${info.km}/km`}</Text>
-          </View>
         </View>
 
         {/* Route card */}
@@ -219,36 +216,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             </View>
           </TouchableOpacity>
 
-        </View>
-
-        {/* Fare breakdown */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIco}>💰</Text>
-            <Text style={styles.cardTitle}>Fare Breakdown</Text>
-          </View>
-
-          <FareRow
-            label={
-              base === 0
-                ? `Distance fare (${dist.toFixed(1)} km · slab pricing)`
-                : `Distance fare (${dist.toFixed(1)} km × ₹${info.km})`
-            }
-            value={`₹${distFare.toLocaleString()}`}
-          />
-          {base > 0 && (
-            <FareRow label="Base charge" value={`₹${base.toLocaleString()}`} />
-          )}
-          {acEnabled && <FareRow label="AC charge" value={`₹${acPrice.toLocaleString()}`} />}
-          <View style={styles.fareDivider} />
-          <FareRow label="Estimated Total" value={`₹${total.toLocaleString()}`} bold />
-
-          <View style={styles.fareNote}>
-            <Text style={styles.fareNoteIco}>ℹ️</Text>
-            <Text style={styles.fareNoteTxt}>
-              Final amount may vary based on actual distance and add-ons. Payment after the ride.
-            </Text>
-          </View>
         </View>
 
         {/* Safety note */}
