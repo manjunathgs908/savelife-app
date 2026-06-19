@@ -1129,17 +1129,12 @@ export default function DestinationScreen({ navigation, route }) {
                       <View style={s.cardInfo}>
                         <Text style={s.ambName}>{amb.name}</Text>
                         <Text style={s.ambDesc}>{amb.desc}</Text>
-                        <View style={s.metaRow}>
-                          <Text style={s.metaChip}>⏱ ~{info.eta} min away</Text>
-                          <Text style={s.metaChip}>Slab pricing</Text>
-                        </View>
                       </View>
 
                       <View style={s.priceCol}>
                         <Text style={[s.priceTotal, isActive && { color: COLORS.red }]}>
                           ₹{est.toLocaleString()}
                         </Text>
-                        <Text style={s.priceEst}>est.</Text>
                         <View style={[s.radio, isActive && s.radioActive]}>
                           {isActive && <View style={s.radioDot} />}
                         </View>
@@ -1161,13 +1156,6 @@ export default function DestinationScreen({ navigation, route }) {
                 </React.Fragment>
               );
             })}
-
-            <View style={s.noteBox}>
-              <Text style={s.noteIco}>ℹ️</Text>
-              <Text style={s.noteTxt}>
-                {`Estimated fare uses slab pricing for ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`}
-              </Text>
-            </View>
 
             <View style={{ height: 20 }} />
           </ScrollView>
@@ -1348,15 +1336,8 @@ const s = StyleSheet.create({
   cardInfo: { flex: 1 },
   ambName: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
   ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 7 },
-  metaChip: {
-    color: COLORS.grayDim, fontSize: 10,
-    backgroundColor: COLORS.bg3,
-    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
-  },
   priceCol: { alignItems: "flex-end", gap: 4 },
   priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
-  priceEst: { color: COLORS.grayDim, fontSize: 10 },
   radio: {
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 2, borderColor: COLORS.border,
@@ -1378,15 +1359,6 @@ const s = StyleSheet.create({
   featureRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
   featureCheck: { color: COLORS.green, fontSize: 13, fontWeight: "700", width: 16 },
   featureTxt: { color: COLORS.text, fontSize: 13 },
-
-  noteBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: "#eff6ff",
-    borderRadius: 12, padding: 12, marginTop: 4,
-    borderWidth: 0.5, borderColor: "rgba(59,130,246,0.2)",
-  },
-  noteIco: { fontSize: 16, marginTop: 1 },
-  noteTxt: { flex: 1, color: "#3b82f6", fontSize: 12, lineHeight: 17 },
 
   // ── Payment + Confirm Booking footer ────────────────────────────────────────
   vsFooter: {
