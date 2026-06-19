@@ -4,9 +4,9 @@ import {
   StyleSheet, Switch, Alert, FlatList, ActivityIndicator, Modal, Platform,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
-import * as Location from "expo-location";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import LocationPickerModal, { PICKUP_RECENT_KEY, DEST_RECENT_KEY } from "../components/LocationPickerModal";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -75,33 +75,6 @@ function fmtDateOnly(d) {
 function fmtTimeOnly(d) {
   if (!d) return null;
   return fmt12(d.getHours(), d.getMinutes());
-}
-
-async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`
-    );
-    const data = await res.json();
-    if (data.results?.length) return data.results[0].formatted_address;
-  } catch {}
-  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-}
-
-async function fetchPlaceDetails(place_id, fallbackLabel) {
-  const res = await fetch(
-    `https://maps.googleapis.com/maps/api/place/details/json` +
-    `?place_id=${place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
-  );
-  const data = await res.json();
-  if (!data.result?.geometry) throw new Error("no geometry");
-  return {
-    coord: {
-      latitude:  data.result.geometry.location.lat,
-      longitude: data.result.geometry.location.lng,
-    },
-    label: data.result.formatted_address || fallbackLabel,
-  };
 }
 
 function decodePolyline(encoded) {
@@ -217,19 +190,11 @@ export default function ScheduleScreen({ navigation }) {
   // ── Step 1: Trip Details ──
   const [pickupQuery, setPickupQuery] = useState("");
   const [pickupCoord, setPickupCoord] = useState(null);
-  const [pickupPreds,  setPickupPreds]  = useState([]);
-  const [pickupPhase,  setPickupPhase]  = useState("idle");
-  const pickupDebRef = useRef(null);
-
-  const [gpsCoord,   setGpsCoord]   = useState(null);
-  const [gpsLabel,   setGpsLabel]   = useState("");
-  const [gpsLoading, setGpsLoading] = useState(true);
+  const [pickupPickerVisible, setPickupPickerVisible] = useState(false);
 
   const [dropQuery, setDropQuery] = useState("");
   const [dropCoord, setDropCoord] = useState(null);
-  const [dropPreds,  setDropPreds]  = useState([]);
-  const [dropPhase,  setDropPhase]  = useState("idle");
-  const dropDebRef = useRef(null);
+  const [dropPickerVisible, setDropPickerVisible] = useState(false);
 
   const [routeCoords,   setRouteCoords]   = useState([]);
   const [durationText,  setDurationText]  = useState(null);
@@ -258,23 +223,6 @@ export default function ScheduleScreen({ navigation }) {
 
   const selectedAmb     = AMBULANCE_TYPES.find(a => a.id === ambulance);
   const selectedPurpose = PURPOSES.find(p => p.id === purpose);
-
-  // ── GPS resolve once, on mount ──
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") { setGpsLoading(false); return; }
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        setGpsCoord(coord);
-        setGpsLabel(await reverseGeocode(coord.latitude, coord.longitude));
-      } catch {
-      } finally {
-        setGpsLoading(false);
-      }
-    })();
-  }, []);
 
   // ── Live pricing fetch, once ──
   useEffect(() => {
@@ -341,74 +289,16 @@ export default function ScheduleScreen({ navigation }) {
     return () => clearTimeout(t);
   }, [pickupCoord, dropCoord]);
 
-  function onChangePickupQuery(text) {
-    setPickupQuery(text);
-    setPickupCoord(null);
-    clearTimeout(pickupDebRef.current);
-    if (text.length < 2) { setPickupPreds([]); setPickupPhase("idle"); return; }
-    setPickupPhase("loading");
-    pickupDebRef.current = setTimeout(async () => {
-      try {
-        const bias = gpsCoord ? `&location=${gpsCoord.latitude},${gpsCoord.longitude}&radius=50000` : "";
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
-        );
-        const data = await res.json();
-        const preds = data.predictions || [];
-        setPickupPreds(preds);
-        setPickupPhase(preds.length ? "results" : "empty");
-      } catch { setPickupPhase("empty"); }
-    }, 350);
+  function handlePickupSelect({ coord, label }) {
+    setPickupCoord(coord);
+    setPickupQuery(label);
+    setPickupPickerVisible(false);
   }
 
-  async function selectPickupPrediction(pred) {
-    try {
-      const { coord, label } = await fetchPlaceDetails(pred.place_id, pred.description);
-      setPickupCoord(coord);
-      setPickupQuery(label);
-      setPickupPreds([]);
-      setPickupPhase("idle");
-    } catch {}
-  }
-
-  function useCurrentLocationForPickup() {
-    if (!gpsCoord) return;
-    setPickupCoord(gpsCoord);
-    setPickupQuery(gpsLabel);
-    setPickupPreds([]);
-    setPickupPhase("idle");
-  }
-
-  function onChangeDropQuery(text) {
-    setDropQuery(text);
-    setDropCoord(null);
-    clearTimeout(dropDebRef.current);
-    if (text.length < 2) { setDropPreds([]); setDropPhase("idle"); return; }
-    setDropPhase("loading");
-    dropDebRef.current = setTimeout(async () => {
-      try {
-        const bias = pickupCoord ? `&location=${pickupCoord.latitude},${pickupCoord.longitude}&radius=50000` : "";
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
-        );
-        const data = await res.json();
-        const preds = data.predictions || [];
-        setDropPreds(preds);
-        setDropPhase(preds.length ? "results" : "empty");
-      } catch { setDropPhase("empty"); }
-    }, 350);
-  }
-
-  async function selectDropPrediction(pred) {
-    try {
-      const { coord, label } = await fetchPlaceDetails(pred.place_id, pred.description);
-      setDropCoord(coord);
-      setDropQuery(label);
-      setDropPreds([]);
-      setDropPhase("idle");
-    } catch {}
+  function handleDropSelect({ coord, label }) {
+    setDropCoord(coord);
+    setDropQuery(label);
+    setDropPickerVisible(false);
   }
 
   const fare = ambulance
@@ -496,58 +386,24 @@ export default function ScheduleScreen({ navigation }) {
             <Text style={styles.qHint}>Enter pickup, drop location, date & purpose</Text>
 
             <Text style={styles.fieldLabel}>Pickup location *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Search address or landmark"
-              placeholderTextColor={COLORS.grayDim}
-              value={pickupQuery}
-              onChangeText={onChangePickupQuery}
-            />
-            {!pickupCoord && (
-              <TouchableOpacity style={styles.gpsRow} onPress={useCurrentLocationForPickup} disabled={!gpsCoord}>
-                {gpsLoading ? (
-                  <ActivityIndicator size="small" color={COLORS.red} />
-                ) : (
-                  <Text style={styles.gpsIcon}>📍</Text>
-                )}
-                <Text style={styles.gpsText} numberOfLines={1}>
-                  {gpsLoading ? "Finding your location…" : gpsCoord ? `Use current location — ${gpsLabel}` : "Location unavailable"}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {pickupPhase === "results" && (
-              <View style={styles.predDropdown}>
-                {pickupPreds.map(p => (
-                  <TouchableOpacity key={p.place_id} style={styles.predRow} onPress={() => selectPickupPrediction(p)}>
-                    <Text style={styles.predMain} numberOfLines={1}>{p.structured_formatting?.main_text || p.description}</Text>
-                    {p.structured_formatting?.secondary_text ? (
-                      <Text style={styles.predSub} numberOfLines={1}>{p.structured_formatting.secondary_text}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            <TouchableOpacity style={styles.input} onPress={() => setPickupPickerVisible(true)} activeOpacity={0.7}>
+              <Text
+                style={[styles.inputTxt, !pickupQuery && { color: COLORS.grayDim }]}
+                numberOfLines={1}
+              >
+                {pickupQuery || "Search address or landmark"}
+              </Text>
+            </TouchableOpacity>
 
             <Text style={styles.fieldLabel}>Drop location *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. Hospital name & address"
-              placeholderTextColor={COLORS.grayDim}
-              value={dropQuery}
-              onChangeText={onChangeDropQuery}
-            />
-            {dropPhase === "results" && (
-              <View style={styles.predDropdown}>
-                {dropPreds.map(p => (
-                  <TouchableOpacity key={p.place_id} style={styles.predRow} onPress={() => selectDropPrediction(p)}>
-                    <Text style={styles.predMain} numberOfLines={1}>{p.structured_formatting?.main_text || p.description}</Text>
-                    {p.structured_formatting?.secondary_text ? (
-                      <Text style={styles.predSub} numberOfLines={1}>{p.structured_formatting.secondary_text}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            <TouchableOpacity style={styles.input} onPress={() => setDropPickerVisible(true)} activeOpacity={0.7}>
+              <Text
+                style={[styles.inputTxt, !dropQuery && { color: COLORS.grayDim }]}
+                numberOfLines={1}
+              >
+                {dropQuery || "e.g. Hospital name & address"}
+              </Text>
+            </TouchableOpacity>
 
             {pickupCoord && dropCoord && (
               <>
@@ -788,6 +644,35 @@ export default function ScheduleScreen({ navigation }) {
         }}
         onClose={() => setPickerMode(null)}
       />
+
+      {/* Pickup location picker — GPS + autocomplete + recents + favourites + hospitals */}
+      <LocationPickerModal
+        visible={pickupPickerVisible}
+        title="Pickup Location"
+        placeholder="Search address or landmark…"
+        recentsKey={PICKUP_RECENT_KEY}
+        biasCoord={dropCoord}
+        showCurrentLocation
+        showFavourites
+        showHospitals
+        onClose={() => setPickupPickerVisible(false)}
+        onSelect={handlePickupSelect}
+      />
+
+      {/* Drop location picker — same feature set as Pickup */}
+      <LocationPickerModal
+        visible={dropPickerVisible}
+        title="Drop Location"
+        placeholder="e.g. Hospital name & address"
+        recentsKey={DEST_RECENT_KEY}
+        biasCoord={pickupCoord}
+        hospitalAnchorCoord={pickupCoord}
+        showCurrentLocation
+        showFavourites
+        showHospitals
+        onClose={() => setDropPickerVisible(false)}
+        onSelect={handleDropSelect}
+      />
     </View>
   );
 }
@@ -819,18 +704,8 @@ const styles = StyleSheet.create({
   // Fields
   fieldLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
   input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.text, marginBottom: 4 },
+  inputTxt: { fontSize: 13, color: COLORS.text },
   inputMulti: { height: 80, textAlignVertical: "top" },
-
-  // GPS quick-action row (pickup)
-  gpsRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 2 },
-  gpsIcon: { fontSize: 14 },
-  gpsText: { color: COLORS.red, fontSize: 12, fontWeight: "600", flex: 1 },
-
-  // Places autocomplete dropdown
-  predDropdown: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, marginBottom: 8, overflow: "hidden" },
-  predRow: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.06)" },
-  predMain: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
-  predSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
   // Route preview map (ported from DestinationScreen.js, compact for a form screen)
   map: { width: "100%", height: 170, borderRadius: 14, marginTop: 4, marginBottom: 10 },

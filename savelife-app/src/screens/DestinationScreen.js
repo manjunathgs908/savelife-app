@@ -1,22 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  View, Text, TouchableOpacity, TextInput, FlatList, ScrollView,
+  View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, Platform, ActivityIndicator, Modal,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
-import storage from "../utils/storage";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 import { AMBULANCE_TYPES, AMB_DISPLAY, AMB_FEATURES } from "../utils/ambulanceCatalog";
+import LocationPickerModal, { PICKUP_RECENT_KEY, DEST_RECENT_KEY } from "../components/LocationPickerModal";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
-
-const DEST_RECENT_KEY = "@savelife_dest_recents";
-const PICKUP_RECENT_KEY = "@savelife_pickup_recents";
-const FAV_HOME_KEY = "@savelife_fav_home";
-const FAV_WORK_KEY = "@savelife_fav_work";
 
 async function reverseGeocode(lat, lng) {
   try {
@@ -33,42 +28,6 @@ async function reverseGeocode(lat, lng) {
     }
   } catch {}
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-}
-
-async function fetchPlaceDetails(place_id, fallbackLabel) {
-  const res = await fetch(
-    `https://maps.googleapis.com/maps/api/place/details/json` +
-    `?place_id=${place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
-  );
-  const data = await res.json();
-  if (!data.result?.geometry) throw new Error("no geometry");
-  return {
-    coord: {
-      latitude:  data.result.geometry.location.lat,
-      longitude: data.result.geometry.location.lng,
-    },
-    label: data.result.formatted_address || fallbackLabel,
-  };
-}
-
-async function fetchNearbyHospitals(coord) {
-  try {
-    const res = await fetch(
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-      `?location=${coord.latitude},${coord.longitude}` +
-      `&radius=5000&type=hospital&key=${PLACES_KEY}&language=en&rankby=prominence`
-    );
-    const data = await res.json();
-    if (data.results?.length) {
-      return data.results.slice(0, 5).map(p => ({
-        place_id: p.place_id,
-        name:     p.name,
-        vicinity: p.vicinity || "",
-        coord: { latitude: p.geometry.location.lat, longitude: p.geometry.location.lng },
-      }));
-    }
-  } catch {}
-  return [];
 }
 
 async function pickDeviceContact() {
@@ -189,182 +148,8 @@ function PatientDetailsSheet({ visible, onSkip, onContinue }) {
   );
 }
 
-// ─── Pickup-location editor — GPS + autocomplete + recents ───────────────────
-function PickupEditSheet({ visible, anchorCoord, onClose, onSelect }) {
-  const [query, setQuery] = useState("");
-  const [phase, setPhase] = useState("idle");
-  const [predictions, setPredictions] = useState([]);
-  const [gpsCoord, setGpsCoord] = useState(null);
-  const [gpsLabel, setGpsLabel] = useState("Getting location…");
-  const [gpsLoading, setGpsLoading] = useState(true);
-  const [recents, setRecents] = useState([]);
-  const debRef = useRef(null);
-
-  useEffect(() => {
-    if (!visible) return;
-    setQuery(""); setPredictions([]); setPhase("idle");
-    loadRecents();
-    resolveGPS();
-  }, [visible]);
-
-  async function loadRecents() {
-    try {
-      const raw = await storage.getItem(PICKUP_RECENT_KEY);
-      setRecents(raw ? JSON.parse(raw) : []);
-    } catch {}
-  }
-
-  async function resolveGPS() {
-    setGpsLoading(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { setGpsLabel("Location permission denied"); setGpsLoading(false); return; }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-      setGpsCoord(coord);
-      setGpsLabel(await reverseGeocode(coord.latitude, coord.longitude));
-    } catch {
-      setGpsLabel("Unable to get location");
-    } finally {
-      setGpsLoading(false);
-    }
-  }
-
-  function onChangeQuery(text) {
-    setQuery(text);
-    clearTimeout(debRef.current);
-    if (text.length < 2) { setPredictions([]); setPhase("idle"); return; }
-    setPhase("loading");
-    debRef.current = setTimeout(async () => {
-      try {
-        const bias = anchorCoord ? `&location=${anchorCoord.latitude},${anchorCoord.longitude}&radius=50000` : "";
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
-        );
-        const data = await res.json();
-        const preds = data.predictions || [];
-        setPredictions(preds);
-        setPhase(preds.length ? "results" : "empty");
-      } catch { setPhase("empty"); }
-    }, 350);
-  }
-
-  async function pushToRecents(item) {
-    try {
-      const raw = await storage.getItem(PICKUP_RECENT_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      const next = [item, ...arr.filter(r => r.place_id !== item.place_id)].slice(0, 6);
-      await storage.setItem(PICKUP_RECENT_KEY, JSON.stringify(next));
-    } catch {}
-  }
-
-  async function handleSelectPrediction(pred) {
-    try {
-      const result = await fetchPlaceDetails(pred.place_id, pred.description);
-      await pushToRecents({ place_id: pred.place_id, label: result.label, coord: result.coord });
-      onSelect(result);
-    } catch {}
-  }
-
-  async function handleSelectRecent(r) {
-    if (r.coord) onSelect({ coord: r.coord, label: r.label });
-  }
-
-  const listData = useMemo(() => {
-    if (phase === "results") return predictions.map(p => ({ id: p.place_id, type: "prediction", data: p }));
-    const rows = [{ id: "__cur", type: "current" }];
-    if (recents.length > 0) {
-      rows.push({ id: "__rec_hdr", type: "hdr", title: "🕐 Recent Pickup Locations" });
-      recents.forEach((r, i) => rows.push({ id: `rec_${i}`, type: "recent", data: r }));
-    }
-    return rows;
-  }, [phase, predictions, recents]);
-
-  function renderItem({ item }) {
-    if (item.type === "hdr") return <Text style={s.sectionHdr}>{item.title}</Text>;
-    if (item.type === "current") {
-      return (
-        <TouchableOpacity
-          style={s.row}
-          onPress={() => gpsCoord && onSelect({ coord: gpsCoord, label: gpsLabel })}
-          disabled={!gpsCoord}
-          activeOpacity={0.7}
-        >
-          <View style={[s.rowIco, s.icoBlue]}>
-            {gpsLoading ? <ActivityIndicator size="small" color="#3b82f6" /> : <Text style={{ fontSize: 16 }}>📍</Text>}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[s.rowMain, { color: "#3b82f6" }]}>Use Current Location</Text>
-            <Text style={s.rowSub} numberOfLines={1}>{gpsLabel}</Text>
-          </View>
-        </TouchableOpacity>
-      );
-    }
-    if (item.type === "recent") {
-      return (
-        <TouchableOpacity style={s.row} onPress={() => handleSelectRecent(item.data)} activeOpacity={0.7}>
-          <View style={[s.rowIco, s.icoGray]}><Text style={{ fontSize: 14 }}>🕐</Text></View>
-          <Text style={s.rowMain} numberOfLines={1}>{item.data.label}</Text>
-        </TouchableOpacity>
-      );
-    }
-    if (item.type === "prediction") {
-      return (
-        <TouchableOpacity style={s.row} onPress={() => handleSelectPrediction(item.data)} activeOpacity={0.7}>
-          <View style={[s.rowIco, s.icoGray]}><Text style={{ fontSize: 14 }}>📍</Text></View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.rowMain} numberOfLines={1}>
-              {item.data.structured_formatting?.main_text || item.data.description}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      );
-    }
-    return null;
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
-      <TouchableOpacity style={bsh.overlay} activeOpacity={1} onPress={onClose} />
-      <View style={bsh.kvWrap} pointerEvents="box-none">
-        <View style={s.editSheet}>
-          <View style={bsh.handle} />
-          <View style={s.editHeaderRow}>
-            <TouchableOpacity style={s.editBackBtn} onPress={onClose} activeOpacity={0.7}>
-              <Text style={s.editBackArrow}>←</Text>
-            </TouchableOpacity>
-            <Text style={s.editTitle}>Edit Pickup Location</Text>
-          </View>
-          <View style={s.editInputRow}>
-            <Text style={s.searchIco}>🔍</Text>
-            <TextInput
-              style={s.editInput}
-              placeholder="Search address or landmark…"
-              placeholderTextColor={COLORS.grayDim}
-              value={query}
-              onChangeText={onChangeQuery}
-              autoFocus
-              autoCorrect={false}
-            />
-            {phase === "loading" && <ActivityIndicator size="small" color={COLORS.red} />}
-          </View>
-          {phase === "empty" ? (
-            <Text style={s.rowEmpty}>No results found</Text>
-          ) : (
-            <FlatList
-              data={listData}
-              keyExtractor={item => item.id}
-              keyboardShouldPersistTaps="handled"
-              renderItem={renderItem}
-              style={{ maxHeight: 320 }}
-            />
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-}
+// Pickup-location editor and destination search now both use the shared
+// LocationPickerModal component (src/components/LocationPickerModal.js).
 
 // ─── "When is this needed?" — Now vs Schedule Ambulance ───────────────────────
 function ScheduleTypeSheet({ visible, onClose, onPickNow, onPickSchedule }) {
@@ -558,18 +343,9 @@ export default function DestinationScreen({ navigation, route }) {
   const [destCoord, setDestCoord] = useState(null);
   const [destLabel, setDestLabel] = useState("");
 
-  const [query,       setQuery]       = useState("");
-  const [phase,       setPhase]       = useState("idle"); // idle | loading | results | empty
-  const [predictions, setPredictions] = useState([]);
-
-  const [hospitals,    setHospitals]    = useState([]);
-  const [hospsLoading, setHospsLoading] = useState(false);
-  const [recents,      setRecents]      = useState([]);
-  const [favourites,   setFavourites]   = useState({ home: null, work: null });
-  const [settingFav,   setSettingFav]   = useState(null); // "home" | "work" | null
-
   const [patientSheetVisible, setPatientSheetVisible] = useState(false);
   const [pickupEditVisible,   setPickupEditVisible]   = useState(false);
+  const [destPickerVisible,   setDestPickerVisible]   = useState(false);
   const [patientType,  setPatientType]  = useState(null);
   const [contactName,  setContactName]  = useState(null);
   const [contactPhone, setContactPhone] = useState(null);
@@ -614,7 +390,6 @@ export default function DestinationScreen({ navigation, route }) {
     filteredAmbulanceTypes[0]?.id ?? "bls"
   );
 
-  const debRef = useRef(null);
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -626,9 +401,6 @@ export default function DestinationScreen({ navigation, route }) {
 
   // ── GPS resolution + full-address lookup for the Pickup field ─────────────
   useEffect(() => {
-    loadFavourites();
-    loadRecents();
-
     if (pickupCoord) {
       // Home already resolved a coordinate, but only with its own short
       // header-style label — re-resolve here to get the FULL address
@@ -637,8 +409,6 @@ export default function DestinationScreen({ navigation, route }) {
       reverseGeocode(pickupCoord.latitude, pickupCoord.longitude)
         .then(setPickupLabel)
         .finally(() => setGpsLoading(false));
-      setHospsLoading(true);
-      fetchNearbyHospitals(pickupCoord).then(setHospitals).finally(() => setHospsLoading(false));
       return;
     }
 
@@ -650,8 +420,6 @@ export default function DestinationScreen({ navigation, route }) {
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setPickupCoord(coord);
         setPickupLabel(await reverseGeocode(coord.latitude, coord.longitude));
-        setHospsLoading(true);
-        fetchNearbyHospitals(coord).then(setHospitals).finally(() => setHospsLoading(false));
       } catch {
         setPickupLabel("Unable to get location");
       } finally {
@@ -659,23 +427,6 @@ export default function DestinationScreen({ navigation, route }) {
       }
     })();
   }, []);
-
-  async function loadRecents() {
-    try {
-      const raw = await storage.getItem(DEST_RECENT_KEY);
-      setRecents(raw ? JSON.parse(raw) : []);
-    } catch {}
-  }
-
-  async function loadFavourites() {
-    try {
-      const [h, w] = await Promise.all([storage.getItem(FAV_HOME_KEY), storage.getItem(FAV_WORK_KEY)]);
-      setFavourites({
-        home: h ? JSON.parse(h) : null,
-        work: w ? JSON.parse(w) : null,
-      });
-    } catch {}
-  }
 
   // ── Route preview once destination is chosen ──────────────────────────────
   useEffect(() => {
@@ -734,78 +485,6 @@ export default function DestinationScreen({ navigation, route }) {
     return () => clearTimeout(t);
   }, [destCoord, pickupCoord]);
 
-  // ── Destination search ─────────────────────────────────────────────────────
-  function onChangeQuery(text) {
-    setQuery(text);
-    clearTimeout(debRef.current);
-    if (text.length < 2) { setPredictions([]); setPhase("idle"); return; }
-    setPhase("loading");
-    debRef.current = setTimeout(async () => {
-      try {
-        const bias = pickupCoord ? `&location=${pickupCoord.latitude},${pickupCoord.longitude}&radius=50000` : "";
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
-          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
-        );
-        const data = await res.json();
-        const preds = data.predictions || [];
-        setPredictions(preds);
-        setPhase(preds.length ? "results" : "empty");
-      } catch { setPhase("empty"); }
-    }, 350);
-  }
-
-  async function pushToRecents(item) {
-    try {
-      const raw = await storage.getItem(DEST_RECENT_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      const next = [item, ...arr.filter(r => r.place_id !== item.place_id)].slice(0, 5);
-      await storage.setItem(DEST_RECENT_KEY, JSON.stringify(next));
-      setRecents(next);
-    } catch {}
-  }
-
-  function selectDestination(coord, label) {
-    if (settingFav) {
-      const key = settingFav === "home" ? FAV_HOME_KEY : FAV_WORK_KEY;
-      const value = { coord, label };
-      storage.setItem(key, JSON.stringify(value)).catch(() => {});
-      setFavourites(prev => ({ ...prev, [settingFav]: value }));
-      setSettingFav(null);
-    }
-    setDestCoord(coord);
-    setDestLabel(label);
-    setQuery("");
-    setPredictions([]);
-    setPhase("idle");
-  }
-
-  async function handleSelectPrediction(pred) {
-    try {
-      const result = await fetchPlaceDetails(pred.place_id, pred.description);
-      await pushToRecents({ place_id: pred.place_id, label: result.label, sublabel: pred.structured_formatting?.secondary_text || "", coord: result.coord });
-      selectDestination(result.coord, result.label);
-    } catch {}
-  }
-
-  async function handleSelectHospital(h) {
-    await pushToRecents({ place_id: h.place_id, label: h.name, sublabel: h.vicinity, coord: h.coord });
-    selectDestination(h.coord, `${h.name}${h.vicinity ? ", " + h.vicinity : ""}`);
-  }
-
-  function handleSelectRecent(r) {
-    if (r.coord) selectDestination(r.coord, r.label);
-  }
-
-  function handleFavouriteTap(key) {
-    const fav = favourites[key];
-    if (fav) {
-      selectDestination(fav.coord, fav.label);
-    } else {
-      setSettingFav(key);
-    }
-  }
-
   // ── Pickup edit flow ────────────────────────────────────────────────────────
   function handlePickupTap() {
     setPatientSheetVisible(true);
@@ -828,8 +507,13 @@ export default function DestinationScreen({ navigation, route }) {
     setPickupCoord(coord);
     setPickupLabel(label);
     setPickupEditVisible(false);
-    setHospsLoading(true);
-    fetchNearbyHospitals(coord).then(setHospitals).finally(() => setHospsLoading(false));
+  }
+
+  // ── Destination picker ──────────────────────────────────────────────────────
+  function handleDestSelect({ coord, label }) {
+    setDestCoord(coord);
+    setDestLabel(label);
+    setDestPickerVisible(false);
   }
 
   // ── Now / Schedule ─────────────────────────────────────────────────────────
@@ -876,92 +560,6 @@ export default function DestinationScreen({ navigation, route }) {
     });
   }
 
-  // ── Idle-state list (favourites / recents / hospitals) ────────────────────
-  const idleListData = useMemo(() => {
-    const rows = [];
-    rows.push({ id: "__fav_hdr", type: "hdr", title: "⭐ Favourites" });
-    rows.push({ id: "__fav_home", type: "favourite", key: "home", icon: "🏠", label: "Home", data: favourites.home });
-    rows.push({ id: "__fav_work", type: "favourite", key: "work", icon: "💼", label: "Work", data: favourites.work });
-
-    if (recents.length > 0) {
-      rows.push({ id: "__rec_hdr", type: "hdr", title: "🕐 Recent Searches" });
-      recents.forEach((r, i) => rows.push({ id: `rec_${i}`, type: "recent", data: r }));
-    }
-
-    rows.push({ id: "__hosp_hdr", type: "hdr", title: "🏥 Nearby Hospitals" });
-    if (hospsLoading) rows.push({ id: "__hosp_loading", type: "hosp_loading" });
-    else if (hospitals.length === 0) rows.push({ id: "__hosp_none", type: "hosp_empty" });
-    else hospitals.forEach(h => rows.push({ id: `hosp_${h.place_id}`, type: "hospital", data: h }));
-
-    return rows;
-  }, [favourites, recents, hospitals, hospsLoading]);
-
-  function renderIdleItem({ item }) {
-    switch (item.type) {
-      case "hdr":
-        return <Text style={s.sectionHdr}>{item.title}</Text>;
-      case "favourite":
-        return (
-          <TouchableOpacity style={s.row} onPress={() => handleFavouriteTap(item.key)} activeOpacity={0.7}>
-            <View style={[s.rowIco, s.icoYellow]}><Text style={{ fontSize: 16 }}>{item.icon}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowMain}>{item.label}</Text>
-              <Text style={s.rowSub} numberOfLines={1}>
-                {item.data ? item.data.label : "Tap to set"}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        );
-      case "recent":
-        return (
-          <TouchableOpacity style={s.row} onPress={() => handleSelectRecent(item.data)} activeOpacity={0.7}>
-            <View style={[s.rowIco, s.icoGray]}><Text style={{ fontSize: 14 }}>🕐</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowMain} numberOfLines={1}>{item.data.label}</Text>
-              {item.data.sublabel ? <Text style={s.rowSub} numberOfLines={1}>{item.data.sublabel}</Text> : null}
-            </View>
-          </TouchableOpacity>
-        );
-      case "hospital":
-        return (
-          <TouchableOpacity style={s.row} onPress={() => handleSelectHospital(item.data)} activeOpacity={0.7}>
-            <View style={[s.rowIco, s.icoRed]}><Text style={{ fontSize: 14 }}>🏥</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.rowMain} numberOfLines={1}>{item.data.name}</Text>
-              <Text style={s.rowSub} numberOfLines={1}>{item.data.vicinity}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      case "hosp_loading":
-        return (
-          <View style={s.inlineLoad}>
-            <ActivityIndicator size="small" color={COLORS.red} />
-            <Text style={s.inlineLoadTxt}>Finding nearby hospitals…</Text>
-          </View>
-        );
-      case "hosp_empty":
-        return <Text style={s.rowEmpty}>No hospitals found nearby</Text>;
-      default:
-        return null;
-    }
-  }
-
-  function renderPredictionItem({ item }) {
-    return (
-      <TouchableOpacity style={s.row} onPress={() => handleSelectPrediction(item)} activeOpacity={0.7}>
-        <View style={[s.rowIco, s.icoGray]}><Text style={{ fontSize: 14 }}>📍</Text></View>
-        <View style={{ flex: 1 }}>
-          <Text style={s.rowMain} numberOfLines={1}>
-            {item.structured_formatting?.main_text || item.description}
-          </Text>
-          {item.structured_formatting?.secondary_text ? (
-            <Text style={s.rowSub} numberOfLines={1}>{item.structured_formatting.secondary_text}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
   return (
     <View style={s.root}>
       {/* Header */}
@@ -990,18 +588,12 @@ export default function DestinationScreen({ navigation, route }) {
 
               <View style={s.inputDivider} />
 
-              <View style={s.inputRow}>
+              <TouchableOpacity style={s.inputRow} onPress={() => setDestPickerVisible(true)} activeOpacity={0.7}>
                 <View style={s.dotRed} />
-                <TextInput
-                  style={s.destInput}
-                  placeholder="Enter Hospital Name or Destination"
-                  placeholderTextColor={COLORS.grayDim}
-                  value={query}
-                  onChangeText={onChangeQuery}
-                  returnKeyType="search"
-                />
-                {phase === "loading" && <ActivityIndicator size="small" color={COLORS.red} />}
-              </View>
+                <Text style={[s.inputTxt, !destLabel && { color: COLORS.grayDim, fontWeight: "400" }]} numberOfLines={1}>
+                  {destLabel || "Enter Hospital Name or Destination"}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={s.nowBtn} onPress={() => setScheduleTypeVisible(true)} activeOpacity={0.85}>
@@ -1010,30 +602,11 @@ export default function DestinationScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
-          {/* Body: predictions while typing, otherwise favourites / recents / hospitals */}
-          {phase === "empty" ? (
-            <View style={s.emptyState}>
-              <Text style={s.emptyIco}>🔍</Text>
-              <Text style={s.emptyTitle}>No results found</Text>
-              <Text style={s.emptySub}>Try a different hospital name or address</Text>
-            </View>
-          ) : phase === "results" ? (
-            <FlatList
-              data={predictions}
-              keyExtractor={item => item.place_id}
-              keyboardShouldPersistTaps="handled"
-              renderItem={renderPredictionItem}
-              contentContainerStyle={s.listContent}
-            />
-          ) : (
-            <FlatList
-              data={idleListData}
-              keyExtractor={item => item.id}
-              keyboardShouldPersistTaps="handled"
-              renderItem={renderIdleItem}
-              contentContainerStyle={s.listContent}
-            />
-          )}
+          <View style={s.emptyState}>
+            <Text style={s.emptyIco}>🏥</Text>
+            <Text style={s.emptyTitle}>Where would you like to go?</Text>
+            <Text style={s.emptySub}>Tap the destination field to search hospitals, favourites & recents</Text>
+          </View>
         </>
       ) : (
         <>
@@ -1205,11 +778,28 @@ export default function DestinationScreen({ navigation, route }) {
       />
 
       {/* Pickup editor */}
-      <PickupEditSheet
+      <LocationPickerModal
         visible={pickupEditVisible}
-        anchorCoord={pickupCoord}
+        title="Edit Pickup Location"
+        recentsKey={PICKUP_RECENT_KEY}
+        biasCoord={pickupCoord}
+        showCurrentLocation
         onClose={() => setPickupEditVisible(false)}
         onSelect={handlePickupSelect}
+      />
+
+      {/* Destination search */}
+      <LocationPickerModal
+        visible={destPickerVisible}
+        title="Choose Destination"
+        placeholder="Enter Hospital Name or Destination"
+        recentsKey={DEST_RECENT_KEY}
+        biasCoord={pickupCoord}
+        hospitalAnchorCoord={pickupCoord}
+        showFavourites
+        showHospitals
+        onClose={() => setDestPickerVisible(false)}
+        onSelect={handleDestSelect}
       />
 
       {/* Now vs Schedule */}
@@ -1272,7 +862,6 @@ const s = StyleSheet.create({
   dotGreen: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#22c55e", flexShrink: 0 },
   dotRed:   { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red, flexShrink: 0 },
   inputTxt: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: "600" },
-  destInput: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: "600" },
 
   nowBtn: {
     width: 60, alignItems: "center", justifyContent: "center",
@@ -1396,63 +985,11 @@ const s = StyleSheet.create({
   confirmBookingTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 
   listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
-  sectionHdr: {
-    fontSize: 11, fontWeight: "700", color: COLORS.grayDim,
-    textTransform: "uppercase", letterSpacing: 0.6,
-    paddingTop: 16, paddingBottom: 4,
-  },
-  row: {
-    flexDirection: "row", alignItems: "center",
-    paddingVertical: 11,
-    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
-  },
-  rowIco: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: COLORS.bg3,
-    alignItems: "center", justifyContent: "center",
-    marginRight: 12,
-  },
-  icoBlue:   { backgroundColor: "#eff6ff" },
-  icoGray:   { backgroundColor: COLORS.bg3 },
-  icoRed:    { backgroundColor: "#fee2e2" },
-  icoYellow: { backgroundColor: "#fef9c3" },
-  rowMain:  { fontSize: 14, fontWeight: "600", color: COLORS.text },
-  rowSub:   { fontSize: 12, color: COLORS.grayDim, marginTop: 2 },
-  rowEmpty: { fontSize: 12, color: COLORS.grayDim, paddingVertical: 10, paddingLeft: 4 },
-
-  inlineLoad:    { flexDirection: "row", alignItems: "center", paddingVertical: 14 },
-  inlineLoadTxt: { fontSize: 13, color: COLORS.grayDim, marginLeft: 10 },
 
   emptyState: { alignItems: "center", paddingVertical: 64 },
   emptyIco:   { fontSize: 36, marginBottom: 12 },
   emptyTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 6 },
   emptySub:   { fontSize: 13, color: COLORS.grayDim, textAlign: "center" },
-
-  // ── Pickup-edit sheet (full list, taller than the generic bsh.sheet) ───────
-  editSheet: {
-    backgroundColor: COLORS.bg,
-    borderTopLeftRadius: 22, borderTopRightRadius: 22,
-    paddingTop: 10, paddingHorizontal: 16,
-    paddingBottom: Platform.OS === "ios" ? 42 : 24,
-    maxHeight: "85%",
-  },
-  editHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
-  editBackBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: COLORS.bg3, alignItems: "center", justifyContent: "center",
-    marginRight: 10,
-  },
-  editBackArrow: { fontSize: 20, color: COLORS.text, lineHeight: 22 },
-  editTitle: { fontSize: 17, fontWeight: "700", color: COLORS.text },
-  editInputRow: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.bg2, borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1.5, borderColor: COLORS.border,
-    marginBottom: 10,
-  },
-  editInput: { flex: 1, fontSize: 15, color: COLORS.text },
-  searchIco: { fontSize: 16, marginRight: 8, opacity: 0.5 },
 });
 
 // ─── Shared bottom-sheet shell styles (patient / schedule sheets) ─────────────
