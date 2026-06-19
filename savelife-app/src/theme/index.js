@@ -28,7 +28,6 @@ export const SERVICES = [
   { icon: "✈️", label: "Air", screen: "AirAmbulance" },
   { icon: "🎪", label: "Event", screen: "EventAmbulance" },
   { icon: "🛡️", label: "Standby", screen: "Standby" },
-  { icon: "🏠", label: "Home Care", screen: "HomeCare" },
   { icon: "❄️", label: "Freezer Box", screen: "FreezerBox" },
   { icon: "⚰️", label: "Remains", screen: "Remains" },
   { icon: "🕉️", label: "Antim Yatra", screen: "AntimYatra" },

@@ -20,6 +20,7 @@ import FreezerBoxScreen from "./src/screens/FreezerBoxScreen";
 import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
 import TrainAmbulanceScreen from "./src/screens/TrainAmbulanceScreen";
 import AirAmbulanceScreen from "./src/screens/AirAmbulanceScreen.jsx";
+import AirCargoScreen from "./src/screens/AirCargoScreen";
 import RemainsScreen from "./src/screens/RemainsScreen";
 import DestinationScreen from "./src/screens/DestinationScreen";
 import LocationSearchScreen from "./src/screens/LocationSearchScreen";
@@ -27,7 +28,6 @@ import AmbulanceListScreen from "./src/screens/AmbulanceListScreen";
 import AmbulanceSelectScreen from "./src/screens/AmbulanceSelectScreen";
 import ConfirmBookingScreen from "./src/screens/ConfirmBookingScreen";
 import AntimYatraScreen from "./src/screens/AntimYatraScreen";
-import HomeCareScreen from "./src/screens/HomeCareScreen";
 import StandbyScreen from "./src/screens/StandbyScreen";
 import ScheduleScreen from "./src/screens/ScheduleScreen";
 
@@ -94,9 +94,9 @@ export default function App() {
             <Stack.Screen name="FreezerBoxBooking" component={FreezerBoxBookingScreen} />
             <Stack.Screen name="Train" component={TrainAmbulanceScreen} />
             <Stack.Screen name="AirAmbulance" component={AirAmbulanceScreen} />
+            <Stack.Screen name="AirCargo" component={AirCargoScreen} />
             <Stack.Screen name="Remains" component={RemainsScreen} />
             <Stack.Screen name="AntimYatra" component={AntimYatraScreen} />
-            <Stack.Screen name="HomeCare" component={HomeCareScreen} />
             <Stack.Screen name="Standby" component={StandbyScreen} />
             <Stack.Screen name="Schedule" component={ScheduleScreen} />
             <Stack.Screen name="DestinationScreen" component={DestinationScreen} />
