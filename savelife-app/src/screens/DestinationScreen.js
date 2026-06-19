@@ -546,6 +546,11 @@ function DateTimePickerModal({ visible, mode, value, onConfirm, onClose }) {
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function DestinationScreen({ navigation, route }) {
+  // Set by HomeScreen.js when a service card targets a specific ambulance
+  // category (e.g. "deadbody" for the Dead Body Transport card). Undefined
+  // means "no filter" — show the full catalog (Emergency Ambulance, etc.).
+  const filterType = route?.params?.filterType;
+
   const [pickupCoord, setPickupCoord] = useState(route?.params?.gpsCoord ?? null);
   const [pickupLabel, setPickupLabel] = useState(route?.params?.gpsLabel ?? "Finding your location…");
   const [gpsLoading,  setGpsLoading]  = useState(!route?.params?.gpsCoord);
@@ -580,8 +585,19 @@ export default function DestinationScreen({ navigation, route }) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeCoords, setRouteCoords]   = useState([]);
 
-  // Vehicle-selection phase (shown once destCoord is set)
-  const [selectedAmbType, setSelectedAmbType] = useState("bls");
+  // Vehicle-selection phase (shown once destCoord is set) — filtered to just
+  // the relevant catalog entries when the card that opened this screen
+  // targets one specific ambulance category.
+  const filteredAmbulanceTypes = useMemo(() => {
+    if (filterType === "deadbody") {
+      return AMBULANCE_TYPES.filter(a => a.id === "deadbody");
+    }
+    return AMBULANCE_TYPES;
+  }, [filterType]);
+
+  const [selectedAmbType, setSelectedAmbType] = useState(
+    filteredAmbulanceTypes[0]?.id ?? "bls"
+  );
   const [pricingList,     setPricingList]     = useState([]);
 
   const debRef = useRef(null);
@@ -1083,9 +1099,11 @@ export default function DestinationScreen({ navigation, route }) {
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={s.listHeading}>ALL AMBULANCE TYPES</Text>
+            <Text style={s.listHeading}>
+              {filterType === "deadbody" ? "DEAD BODY TRANSPORT" : "ALL AMBULANCE TYPES"}
+            </Text>
 
-            {AMBULANCE_TYPES.map(amb => {
+            {filteredAmbulanceTypes.map(amb => {
               const info = AMB_RATES[amb.id];
               const est = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
               const isActive = selectedAmbType === amb.id;

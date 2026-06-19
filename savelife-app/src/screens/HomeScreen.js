@@ -100,7 +100,7 @@ const SERVICES = [
     gloss: "rgba(255,255,255,0.20)" },
   { icon: "⚰️", label: "Dead Body\nTransport",  subtitle: "Dignified Service",
     screen: "BookingFlow",    bg: "#ea580c", light: false, popular: false,
-    gloss: "rgba(255,255,255,0.22)" },
+    gloss: "rgba(255,255,255,0.22)", ambulanceFilter: "deadbody" },
   { icon: "🎪", label: "Event\nAmbulance",       subtitle: "Events & Occasions",
     screen: "EventAmbulance", bg: "#d97706", light: false, popular: false,
     gloss: "rgba(255,255,255,0.24)" },
@@ -273,10 +273,11 @@ export default function HomeScreen({ navigation }) {
   // ── Booking flow entry point — tapping the search bar or the Emergency
   //    Ambulance card both open the full Destination screen, where pickup
   //    (auto-detected GPS) and the hospital/destination search both live.
-  function openDestinationScreen() {
+  function openDestinationScreen(ambulanceFilter) {
     navigation.navigate("DestinationScreen", {
       gpsCoord: userCoord,
       gpsLabel: userLabel,
+      filterType: ambulanceFilter,
     });
   }
 
@@ -418,7 +419,7 @@ export default function HomeScreen({ navigation }) {
                     key={svc.label}
                     svc={svc}
                     onPress={() => svc.screen === "BookingFlow"
-                      ? openDestinationScreen()
+                      ? openDestinationScreen(svc.ambulanceFilter)
                       : navigation.navigate(svc.screen)
                     }
                   />

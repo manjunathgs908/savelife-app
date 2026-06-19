@@ -18,8 +18,7 @@ const AMB_RATES = {
   nicu_tempo: { km: 25,                    base: 600,  label: "Newborn Intensive Care Transport • Tempo Traveller" },
   neo:        { km: 25,                    base: 600,  label: "Neonatal Transport" },
   card:       { km: 30,                    base: 1000, label: "Cardiac Emergency" },
-  body_tempo: { km: 18,                    base: 350,  label: "Dead Body Transport • Tempo Traveller" },
-  body_mini:  { km: 18,                    base: 350,  label: "Dead Body Transport • Maruti Eeco" },
+  deadbody:   { km: 18,                    base: 350,  label: "Dignified Transport Service" },
   mort:       { km: 18,                    base: 350,  label: "Mortuary / Remains" },
 };
 
