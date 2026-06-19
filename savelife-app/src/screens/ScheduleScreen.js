@@ -1,50 +1,197 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Switch, Alert,
+  StyleSheet, Switch, Alert, FlatList, ActivityIndicator, Modal, Platform,
 } from "react-native";
+import * as Location from "expo-location";
 import { COLORS } from "../theme";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MON_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
-const STEPS = ["trip", "schedule", "ambulance", "review"];
+const STEPS = ["trip", "ambulance"];
 
-const TRIP_TYPES  = ["One Way", "Round Trip"];
-const PURPOSES    = [
-  { id: "dialysis",    label: "💉 Dialysis" },
-  { id: "chemo",       label: "🧪 Chemotherapy" },
-  { id: "physio",      label: "🦾 Physiotherapy" },
-  { id: "checkup",     label: "🩺 Regular Checkup" },
-  { id: "other",       label: "— Other" },
+const TRIP_TYPES = ["One Way", "Round Trip"];
+const PURPOSES = [
+  { id: "dialysis", label: "💉 Dialysis" },
+  { id: "chemo",    label: "🧪 Chemotherapy" },
+  { id: "physio",   label: "🦾 Physiotherapy" },
+  { id: "checkup",  label: "🩺 Regular Checkup" },
+  { id: "other",    label: "— Other" },
 ];
-const FREQUENCIES = ["Daily", "Weekly", "Monthly", "Custom"];
-const WEEK_DAYS   = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const NUM_MONTHS  = ["1", "2", "3", "6", "12"];
 const AMBULANCE_TYPES = [
-  { id: "bls_van",   icon: "🚐", name: "BLS — Maruti Van",       tag: "Basic Life Support",            desc: "Ideal for regular checkups & small clinics" },
-  { id: "bls_tempo", icon: "🚌", name: "BLS — Tempo Traveller",  tag: "Basic Life Support",            desc: "Larger capacity for patient comfort" },
-  { id: "als",       icon: "🏥", name: "ALS",                    tag: "Advanced Life Support",         desc: "For dialysis, chemotherapy patients" },
-  { id: "acls",      icon: "❤️", name: "ACLS",                   tag: "Advanced Cardiac Life Support", desc: "Premium support for high-risk patients" },
+  { id: "bls_van",   icon: "🚐", name: "BLS — Maruti Van",      tag: "Basic Life Support",            desc: "Ideal for regular checkups & small clinics" },
+  { id: "bls_tempo", icon: "🚌", name: "BLS — Tempo Traveller", tag: "Basic Life Support",            desc: "Larger capacity for patient comfort" },
+  { id: "als",       icon: "🏥", name: "ALS",                   tag: "Advanced Life Support",         desc: "For dialysis, chemotherapy patients" },
+  { id: "acls",      icon: "❤️", name: "ACLS",                  tag: "Advanced Cardiac Life Support", desc: "Premium support for high-risk patients" },
 ];
 
-const SummaryRow = ({ label, value }) => (
-  <View style={styles.sumRow}>
-    <Text style={styles.sumLabel}>{label}</Text>
-    <Text style={styles.sumValue}>{value}</Text>
-  </View>
-);
+// This screen's catalog ids don't map 1:1 to MongoDB serviceType values —
+// the Maruti-Van variant is plain "BLS", and ALS/ACLS only exist as the
+// Tempo Traveller variant in the pricing collection.
+const SCHEDULE_SERVICE_TYPE = {
+  bls_van:   "bls",
+  bls_tempo: "bls_tempo",
+  als:       "als_tempo",
+  acls:      "acls_tempo",
+};
 
-function makeDateChips(fromDate, count = 5) {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(fromDate);
+const DAYS_S = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONS_S = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ITEM_H = 58;
+
+function buildDateList() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(today);
     d.setDate(d.getDate() + i);
     return d;
   });
 }
 
-function formatDate(d) {
-  return `${DAY_NAMES[d.getDay()]}, ${d.getDate()} ${MON_NAMES[d.getMonth()]}`;
+const TIME_SLOTS = (() => {
+  const slots = [];
+  for (let h = 6; h < 24; h++) for (let m = 0; m < 60; m += 30) slots.push({ h, m });
+  return slots;
+})();
+
+function fmt12(h, m) {
+  const ap = h < 12 ? "AM" : "PM";
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ap}`;
+}
+
+function fmtDateOnly(d) {
+  if (!d) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dd = new Date(d); dd.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((dd - today) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  return `${DAYS_S[d.getDay()]}, ${d.getDate()} ${MONS_S[d.getMonth()]}`;
+}
+
+function fmtTimeOnly(d) {
+  if (!d) return null;
+  return fmt12(d.getHours(), d.getMinutes());
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`
+    );
+    const data = await res.json();
+    if (data.results?.length) return data.results[0].formatted_address;
+  } catch {}
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+
+async function fetchPlaceDetails(place_id, fallbackLabel) {
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/details/json` +
+    `?place_id=${place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
+  );
+  const data = await res.json();
+  if (!data.result?.geometry) throw new Error("no geometry");
+  return {
+    coord: {
+      latitude:  data.result.geometry.location.lat,
+      longitude: data.result.geometry.location.lng,
+    },
+    label: data.result.formatted_address || fallbackLabel,
+  };
+}
+
+// ─── Pure-JS date/time wheel picker (ported from DestinationScreen.js) ───────
+function DateTimePickerModal({ visible, mode, value, onConfirm, onClose }) {
+  const DATE_LIST = buildDateList();
+  const [selDate, setSelDate] = useState(0);
+  const [selTime, setSelTime] = useState(0);
+
+  useEffect(() => {
+    if (!visible) return;
+    const v = new Date(value);
+    v.setHours(0, 0, 0, 0);
+    const di = DATE_LIST.findIndex(d => d.toDateString() === v.toDateString());
+    setSelDate(di >= 0 ? di : 0);
+    const ti = TIME_SLOTS.findIndex(t => t.h === value.getHours() && t.m === value.getMinutes());
+    setSelTime(ti >= 0 ? ti : 0);
+  }, [visible]);
+
+  function confirm() {
+    if (mode === "date") {
+      const d = DATE_LIST[selDate];
+      const next = new Date(value);
+      next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+      onConfirm(next);
+    } else {
+      const { h, m } = TIME_SLOTS[selTime];
+      const next = new Date(value);
+      next.setHours(h, m, 0, 0);
+      onConfirm(next);
+    }
+  }
+
+  const isDate = mode === "date";
+  const data   = isDate ? DATE_LIST : TIME_SLOTS;
+  const selIdx = isDate ? selDate : selTime;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
+      <View style={pk.overlay}>
+        <View style={pk.sheet}>
+          <View style={pk.handle} />
+          <View style={pk.header}>
+            <Text style={pk.title}>{isDate ? "📅  Select Date" : "🕐  Select Time"}</Text>
+            <TouchableOpacity style={pk.closeBtn} onPress={onClose}><Text style={pk.closeX}>✕</Text></TouchableOpacity>
+          </View>
+          <FlatList
+            data={data}
+            keyExtractor={(_, i) => String(i)}
+            style={pk.list}
+            showsVerticalScrollIndicator={false}
+            initialScrollIndex={selIdx}
+            getItemLayout={(_, i) => ({ length: ITEM_H, offset: ITEM_H * i, index: i })}
+            renderItem={({ item, index }) => {
+              const active = index === selIdx;
+              let main, sub;
+              if (isDate) {
+                main = index === 0 ? "Today" : index === 1 ? "Tomorrow" : DAYS_S[item.getDay()];
+                sub  = `${item.getDate()} ${MONS_S[item.getMonth()]}`;
+              } else {
+                main = fmt12(item.h, item.m);
+                sub  = null;
+              }
+              return (
+                <TouchableOpacity
+                  style={[pk.row, active && pk.rowActive]}
+                  onPress={() => isDate ? setSelDate(index) : setSelTime(index)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[pk.dot, active && pk.dotActive]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[pk.rowMain, active && pk.rowMainActive]}>{main}</Text>
+                    {sub ? <Text style={[pk.rowSub, active && { color: COLORS.red }]}>{sub}</Text> : null}
+                  </View>
+                  {active && <Text style={pk.check}>✓</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+          <View style={pk.footer}>
+            <TouchableOpacity style={pk.confirmBtn} onPress={confirm} activeOpacity={0.85}>
+              <Text style={pk.confirmTxt}>
+                {isDate
+                  ? `Confirm — ${selDate === 0 ? "Today" : selDate === 1 ? "Tomorrow" : `${DAYS_S[DATE_LIST[selDate]?.getDay()]}, ${DATE_LIST[selDate]?.getDate()} ${MONS_S[DATE_LIST[selDate]?.getMonth()]}`}`
+                  : `Confirm — ${fmt12(TIME_SLOTS[selTime]?.h, TIME_SLOTS[selTime]?.m)}`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 export default function ScheduleScreen({ navigation }) {
@@ -52,50 +199,188 @@ export default function ScheduleScreen({ navigation }) {
   const cur = STEPS[step - 1];
 
   // ── Step 1: Trip Details ──
-  const [pickupLoc,   setPickupLoc]   = useState("");
-  const [dropLoc,     setDropLoc]     = useState("");
-  const [tripType,    setTripType]    = useState("One Way");
-  const [returnTime,  setReturnTime]  = useState("");
-  const [purpose,     setPurpose]     = useState(null);
+  const [pickupQuery, setPickupQuery] = useState("");
+  const [pickupCoord, setPickupCoord] = useState(null);
+  const [pickupPreds,  setPickupPreds]  = useState([]);
+  const [pickupPhase,  setPickupPhase]  = useState("idle");
+  const pickupDebRef = useRef(null);
 
-  // ── Step 2: Schedule ──
-  const [frequency,   setFrequency]   = useState(null);
-  const todayMid = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
-  const [startDate,   setStartDate]   = useState(todayMid);
-  const [endDateText, setEndDateText] = useState("");
-  const [weekDays,    setWeekDays]    = useState([]);
-  const [dayOfMonth,  setDayOfMonth]  = useState(null);
-  const [numMonths,   setNumMonths]   = useState(null);
-  const [timeAmPm,    setTimeAmPm]    = useState(null);
-  const [timeHour,    setTimeHour]    = useState(null);
-  const startChips = makeDateChips(todayMid, 5);
+  const [gpsCoord,   setGpsCoord]   = useState(null);
+  const [gpsLabel,   setGpsLabel]   = useState("");
+  const [gpsLoading, setGpsLoading] = useState(true);
 
-  // ── Step 3: Ambulance & Patient ──
-  const [ambulance,    setAmbulance]    = useState(null);
-  const [patientName,  setPatientName]  = useState("");
-  const [patientAge,   setPatientAge]   = useState("");
-  const [condition,    setCondition]    = useState("");
-  const [wheelchair,   setWheelchair]   = useState(false);
-  const [stretcher,    setStretcher]    = useState(false);
+  const [dropQuery, setDropQuery] = useState("");
+  const [dropCoord, setDropCoord] = useState(null);
+  const [dropPreds,  setDropPreds]  = useState([]);
+  const [dropPhase,  setDropPhase]  = useState("idle");
+  const dropDebRef = useRef(null);
+
+  const [tripType,   setTripType]   = useState("One Way");
+  const [returnTime, setReturnTime] = useState("");
+  const [purpose,    setPurpose]    = useState(null);
+
+  const [scheduleDate, setScheduleDate] = useState(new Date());
+  const [dateChosen, setDateChosen] = useState(false);
+  const [timeChosen, setTimeChosen] = useState(false);
+  const [pickerMode, setPickerMode] = useState(null);
+
+  // ── Step 2: Ambulance & Patient + Confirm ──
+  const [ambulance,   setAmbulance]   = useState(null);
+  const [patientName, setPatientName] = useState("");
+  const [patientAge,  setPatientAge]  = useState("");
+  const [condition,   setCondition]   = useState("");
+  const [wheelchair,  setWheelchair]  = useState(false);
+  const [stretcher,   setStretcher]   = useState(false);
+
+  const [pricingList, setPricingList] = useState([]);
+  const [dist,        setDist]        = useState(null);
+  const [distLoading, setDistLoading] = useState(false);
 
   const selectedAmb     = AMBULANCE_TYPES.find(a => a.id === ambulance);
   const selectedPurpose = PURPOSES.find(p => p.id === purpose);
 
-  function toggleWeekDay(d) {
-    setWeekDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  // ── GPS resolve once, on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") { setGpsLoading(false); return; }
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setGpsCoord(coord);
+        setGpsLabel(await reverseGeocode(coord.latitude, coord.longitude));
+      } catch {
+      } finally {
+        setGpsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Live pricing fetch, once ──
+  useEffect(() => {
+    fetch(PRICING_API)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .catch(() => {});
+  }, []);
+
+  // ── Distance between pickup & drop once both are set ──
+  useEffect(() => {
+    if (!pickupCoord || !dropCoord) { setDist(null); return; }
+
+    function haversineFallback() {
+      const R = 6371;
+      const dLat = ((dropCoord.latitude  - pickupCoord.latitude)  * Math.PI) / 180;
+      const dLng = ((dropCoord.longitude - pickupCoord.longitude) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((pickupCoord.latitude * Math.PI) / 180) *
+        Math.cos((dropCoord.latitude   * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+      const km = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      setDist(parseFloat(km.toFixed(1)));
+    }
+
+    setDistLoading(true);
+    (async () => {
+      try {
+        const url =
+          `https://maps.googleapis.com/maps/api/directions/json` +
+          `?origin=${pickupCoord.latitude},${pickupCoord.longitude}` +
+          `&destination=${dropCoord.latitude},${dropCoord.longitude}` +
+          `&key=${PLACES_KEY}`;
+        const r = await fetch(url);
+        const d = await r.json();
+        if (d.routes?.length) {
+          setDist(d.routes[0].legs[0].distance.value / 1000);
+        } else {
+          haversineFallback();
+        }
+      } catch {
+        haversineFallback();
+      } finally {
+        setDistLoading(false);
+      }
+    })();
+  }, [pickupCoord, dropCoord]);
+
+  function onChangePickupQuery(text) {
+    setPickupQuery(text);
+    setPickupCoord(null);
+    clearTimeout(pickupDebRef.current);
+    if (text.length < 2) { setPickupPreds([]); setPickupPhase("idle"); return; }
+    setPickupPhase("loading");
+    pickupDebRef.current = setTimeout(async () => {
+      try {
+        const bias = gpsCoord ? `&location=${gpsCoord.latitude},${gpsCoord.longitude}&radius=50000` : "";
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
+        );
+        const data = await res.json();
+        const preds = data.predictions || [];
+        setPickupPreds(preds);
+        setPickupPhase(preds.length ? "results" : "empty");
+      } catch { setPickupPhase("empty"); }
+    }, 350);
   }
 
-  const freqReady =
-    !frequency ? false :
-    frequency === "Weekly"  ? weekDays.length > 0 :
-    frequency === "Monthly" ? !!dayOfMonth && !!numMonths :
-    true;
+  async function selectPickupPrediction(pred) {
+    try {
+      const { coord, label } = await fetchPlaceDetails(pred.place_id, pred.description);
+      setPickupCoord(coord);
+      setPickupQuery(label);
+      setPickupPreds([]);
+      setPickupPhase("idle");
+    } catch {}
+  }
+
+  function useCurrentLocationForPickup() {
+    if (!gpsCoord) return;
+    setPickupCoord(gpsCoord);
+    setPickupQuery(gpsLabel);
+    setPickupPreds([]);
+    setPickupPhase("idle");
+  }
+
+  function onChangeDropQuery(text) {
+    setDropQuery(text);
+    setDropCoord(null);
+    clearTimeout(dropDebRef.current);
+    if (text.length < 2) { setDropPreds([]); setDropPhase("idle"); return; }
+    setDropPhase("loading");
+    dropDebRef.current = setTimeout(async () => {
+      try {
+        const bias = pickupCoord ? `&location=${pickupCoord.latitude},${pickupCoord.longitude}&radius=50000` : "";
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
+        );
+        const data = await res.json();
+        const preds = data.predictions || [];
+        setDropPreds(preds);
+        setDropPhase(preds.length ? "results" : "empty");
+      } catch { setDropPhase("empty"); }
+    }, 350);
+  }
+
+  async function selectDropPrediction(pred) {
+    try {
+      const { coord, label } = await fetchPlaceDetails(pred.place_id, pred.description);
+      setDropCoord(coord);
+      setDropQuery(label);
+      setDropPreds([]);
+      setDropPhase("idle");
+    } catch {}
+  }
+
+  const fare = ambulance
+    ? calcFare(SCHEDULE_SERVICE_TYPE[ambulance] || ambulance, dist ?? 0, pricingList, {})
+    : { total: 0 };
 
   const canNext =
-    cur === "trip"      ? pickupLoc.trim().length > 0 && dropLoc.trim().length > 0 && !!purpose :
-    cur === "schedule"  ? freqReady && !!timeHour && !!timeAmPm :
-    cur === "ambulance" ? !!ambulance && patientName.trim().length > 0 :
-    cur === "review"    ? true : false;
+    cur === "trip"      ? !!pickupCoord && !!dropCoord && dateChosen && timeChosen && !!purpose :
+    cur === "ambulance" ? !!ambulance && patientName.trim().length > 0 : false;
 
   function handleNext() {
     if (step < STEPS.length) setStep(step + 1);
@@ -110,23 +395,9 @@ export default function ScheduleScreen({ navigation }) {
   function handleSubmit() {
     Alert.alert(
       "Schedule confirmed!",
-      "Our team will call you to confirm the schedule and pricing.",
+      `Estimated fare ₹${fare.total.toLocaleString()}. Our team will call you shortly to confirm pickup details.`,
       [{ text: "OK", onPress: () => navigation?.goBack() }]
     );
-  }
-
-  function scheduleText() {
-    if (!frequency) return "—";
-    if (frequency === "Daily")   return `Daily · from ${formatDate(startDate)}${endDateText ? ` to ${endDateText}` : ""}`;
-    if (frequency === "Weekly")  return `Weekly · ${weekDays.join(", ")} · from ${formatDate(startDate)}`;
-    if (frequency === "Monthly") return `Monthly · Day ${dayOfMonth} · for ${numMonths} month(s)`;
-    if (frequency === "Custom")  return `Custom · from ${formatDate(startDate)}${endDateText ? ` to ${endDateText}` : ""}`;
-    return "—";
-  }
-
-  function timeText() {
-    if (!timeHour || !timeAmPm) return "—";
-    return `${timeHour}:00 ${timeAmPm}`;
   }
 
   return (
@@ -153,15 +424,15 @@ export default function ScheduleScreen({ navigation }) {
         ))}
       </View>
 
-      {/* Summary bar — step 2+ */}
+      {/* Summary bar — step 2 */}
       {step > 1 && (
         <View style={styles.fareBar}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.fareLbl}>
-              {pickupLoc}  →  {dropLoc}
+            <Text style={styles.fareLbl} numberOfLines={1}>
+              {pickupQuery}  →  {dropQuery}
             </Text>
             <Text style={styles.fareAmt} numberOfLines={1}>
-              {frequency ? `${frequency}  ·  ${timeText()}` : "Set schedule in next step"}
+              {dateChosen && timeChosen ? `${fmtDateOnly(scheduleDate)} · ${fmtTimeOnly(scheduleDate)}` : "—"}
             </Text>
           </View>
           {purpose && (
@@ -178,31 +449,68 @@ export default function ScheduleScreen({ navigation }) {
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 18 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
 
         {/* ── Step 1: Trip Details ── */}
         {cur === "trip" && (
           <>
             <Text style={styles.q}>Trip Details</Text>
-            <Text style={styles.qHint}>Enter pickup, drop location and trip purpose</Text>
+            <Text style={styles.qHint}>Enter pickup, drop location, date & purpose</Text>
 
             <Text style={styles.fieldLabel}>Pickup location *</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Home address"
+              placeholder="Search address or landmark"
               placeholderTextColor={COLORS.grayDim}
-              value={pickupLoc}
-              onChangeText={setPickupLoc}
+              value={pickupQuery}
+              onChangeText={onChangePickupQuery}
             />
+            {!pickupCoord && (
+              <TouchableOpacity style={styles.gpsRow} onPress={useCurrentLocationForPickup} disabled={!gpsCoord}>
+                {gpsLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.red} />
+                ) : (
+                  <Text style={styles.gpsIcon}>📍</Text>
+                )}
+                <Text style={styles.gpsText} numberOfLines={1}>
+                  {gpsLoading ? "Finding your location…" : gpsCoord ? `Use current location — ${gpsLabel}` : "Location unavailable"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {pickupPhase === "results" && (
+              <View style={styles.predDropdown}>
+                {pickupPreds.map(p => (
+                  <TouchableOpacity key={p.place_id} style={styles.predRow} onPress={() => selectPickupPrediction(p)}>
+                    <Text style={styles.predMain} numberOfLines={1}>{p.structured_formatting?.main_text || p.description}</Text>
+                    {p.structured_formatting?.secondary_text ? (
+                      <Text style={styles.predSub} numberOfLines={1}>{p.structured_formatting.secondary_text}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.fieldLabel}>Drop location *</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. Hospital name & address"
               placeholderTextColor={COLORS.grayDim}
-              value={dropLoc}
-              onChangeText={setDropLoc}
+              value={dropQuery}
+              onChangeText={onChangeDropQuery}
             />
+            {dropPhase === "results" && (
+              <View style={styles.predDropdown}>
+                {dropPreds.map(p => (
+                  <TouchableOpacity key={p.place_id} style={styles.predRow} onPress={() => selectDropPrediction(p)}>
+                    <Text style={styles.predMain} numberOfLines={1}>{p.structured_formatting?.main_text || p.description}</Text>
+                    {p.structured_formatting?.secondary_text ? (
+                      <Text style={styles.predSub} numberOfLines={1}>{p.structured_formatting.secondary_text}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.fieldLabel}>Trip type</Text>
             <View style={styles.pillRow}>
@@ -230,6 +538,22 @@ export default function ScheduleScreen({ navigation }) {
               </>
             )}
 
+            <Text style={styles.fieldLabel}>Date & time *</Text>
+            <View style={styles.dateTimeRow}>
+              <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setPickerMode("date")}>
+                <Text style={styles.dateTimeIcon}>📅</Text>
+                <Text style={styles.dateTimeText}>
+                  {dateChosen ? fmtDateOnly(scheduleDate) : "Select date"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setPickerMode("time")}>
+                <Text style={styles.dateTimeIcon}>🕐</Text>
+                <Text style={styles.dateTimeText}>
+                  {timeChosen ? fmtTimeOnly(scheduleDate) : "Select time"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.fieldLabel}>Purpose *</Text>
             <View style={styles.chipGrid}>
               {PURPOSES.map(p => (
@@ -247,193 +571,11 @@ export default function ScheduleScreen({ navigation }) {
           </>
         )}
 
-        {/* ── Step 2: Schedule Frequency ── */}
-        {cur === "schedule" && (
-          <>
-            <Text style={styles.q}>Schedule Frequency</Text>
-            <Text style={styles.qHint}>How often do you need the ambulance?</Text>
-
-            <Text style={styles.sectionLabel}>Frequency *</Text>
-            <View style={styles.pillRow}>
-              {FREQUENCIES.map(f => (
-                <TouchableOpacity
-                  key={f}
-                  style={[styles.pill, frequency === f && styles.pillActive]}
-                  onPress={() => setFrequency(f)}
-                >
-                  <Text style={[styles.pillText, frequency === f && styles.pillTextActive]}>{f}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* ── Daily ── */}
-            {frequency === "Daily" && (
-              <>
-                <Text style={styles.sectionLabel}>Start date</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  style={styles.dateChipScroll}
-                  contentContainerStyle={{ gap: 6, paddingHorizontal: 2, paddingBottom: 4 }}
-                >
-                  {startChips.map((d, i) => {
-                    const isSel = startDate && d.toDateString() === startDate.toDateString();
-                    return (
-                      <TouchableOpacity key={i} style={[styles.dateChip, isSel && styles.dateChipSel]}
-                        onPress={() => setStartDate(d)} activeOpacity={0.75}>
-                        <Text style={[styles.dateChipDay, isSel && { color: "rgba(255,255,255,0.8)" }]}>
-                          {d.toDateString() === todayMid.toDateString() ? "TODAY" : DAY_NAMES[d.getDay()].toUpperCase()}
-                        </Text>
-                        <Text style={[styles.dateChipNum, isSel && { color: COLORS.white }]}>{d.getDate()}</Text>
-                        <Text style={[styles.dateChipMon, isSel && { color: "rgba(255,255,255,0.7)" }]}>{MON_NAMES[d.getMonth()]}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <Text style={styles.sectionLabel}>End date</Text>
-                <TextInput style={styles.input} placeholder="e.g. 31 Dec 2025 or 3 months"
-                  placeholderTextColor={COLORS.grayDim} value={endDateText} onChangeText={setEndDateText} />
-              </>
-            )}
-
-            {/* ── Weekly ── */}
-            {frequency === "Weekly" && (
-              <>
-                <Text style={styles.sectionLabel}>Days of week * (multi-select)</Text>
-                <View style={styles.pillRow}>
-                  {WEEK_DAYS.map(d => (
-                    <TouchableOpacity key={d}
-                      style={[styles.dayPill, weekDays.includes(d) && styles.pillActive]}
-                      onPress={() => toggleWeekDay(d)}
-                    >
-                      <Text style={[styles.pillText, weekDays.includes(d) && styles.pillTextActive]}>{d}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.sectionLabel}>Start date</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  style={styles.dateChipScroll}
-                  contentContainerStyle={{ gap: 6, paddingHorizontal: 2, paddingBottom: 4 }}
-                >
-                  {startChips.map((d, i) => {
-                    const isSel = startDate && d.toDateString() === startDate.toDateString();
-                    return (
-                      <TouchableOpacity key={i} style={[styles.dateChip, isSel && styles.dateChipSel]}
-                        onPress={() => setStartDate(d)} activeOpacity={0.75}>
-                        <Text style={[styles.dateChipDay, isSel && { color: "rgba(255,255,255,0.8)" }]}>
-                          {d.toDateString() === todayMid.toDateString() ? "TODAY" : DAY_NAMES[d.getDay()].toUpperCase()}
-                        </Text>
-                        <Text style={[styles.dateChipNum, isSel && { color: COLORS.white }]}>{d.getDate()}</Text>
-                        <Text style={[styles.dateChipMon, isSel && { color: "rgba(255,255,255,0.7)" }]}>{MON_NAMES[d.getMonth()]}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <Text style={styles.sectionLabel}>End date</Text>
-                <TextInput style={styles.input} placeholder="e.g. 31 Dec 2025 or ongoing"
-                  placeholderTextColor={COLORS.grayDim} value={endDateText} onChangeText={setEndDateText} />
-              </>
-            )}
-
-            {/* ── Monthly ── */}
-            {frequency === "Monthly" && (
-              <>
-                <Text style={styles.sectionLabel}>Date of month *</Text>
-                <View style={styles.monthGrid}>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map(n => (
-                    <TouchableOpacity key={n}
-                      style={[styles.monthDayChip, dayOfMonth === n && styles.pillActive]}
-                      onPress={() => setDayOfMonth(n)}
-                    >
-                      <Text style={[styles.monthDayText, dayOfMonth === n && styles.pillTextActive]}>
-                        {n}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.sectionLabel}>Number of months *</Text>
-                <View style={styles.pillRow}>
-                  {NUM_MONTHS.map(n => (
-                    <TouchableOpacity key={n}
-                      style={[styles.pill, numMonths === n && styles.pillActive]}
-                      onPress={() => setNumMonths(n)}
-                    >
-                      <Text style={[styles.pillText, numMonths === n && styles.pillTextActive]}>
-                        {n} {n === "1" ? "Month" : "Months"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* ── Custom ── */}
-            {frequency === "Custom" && (
-              <>
-                <Text style={styles.sectionLabel}>Start date</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                  style={styles.dateChipScroll}
-                  contentContainerStyle={{ gap: 6, paddingHorizontal: 2, paddingBottom: 4 }}
-                >
-                  {startChips.map((d, i) => {
-                    const isSel = startDate && d.toDateString() === startDate.toDateString();
-                    return (
-                      <TouchableOpacity key={i} style={[styles.dateChip, isSel && styles.dateChipSel]}
-                        onPress={() => setStartDate(d)} activeOpacity={0.75}>
-                        <Text style={[styles.dateChipDay, isSel && { color: "rgba(255,255,255,0.8)" }]}>
-                          {d.toDateString() === todayMid.toDateString() ? "TODAY" : DAY_NAMES[d.getDay()].toUpperCase()}
-                        </Text>
-                        <Text style={[styles.dateChipNum, isSel && { color: COLORS.white }]}>{d.getDate()}</Text>
-                        <Text style={[styles.dateChipMon, isSel && { color: "rgba(255,255,255,0.7)" }]}>{MON_NAMES[d.getMonth()]}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <Text style={styles.sectionLabel}>End date / duration</Text>
-                <TextInput style={styles.input} placeholder="e.g. 31 Dec 2025 or specify dates"
-                  placeholderTextColor={COLORS.grayDim} value={endDateText} onChangeText={setEndDateText} />
-              </>
-            )}
-
-            {/* ── Preferred Time (all frequencies) ── */}
-            {!!frequency && (
-              <>
-                <View style={styles.timeDivider} />
-                <Text style={styles.sectionLabel}>Preferred time *</Text>
-                <View style={styles.ampmRow}>
-                  {["AM", "PM"].map(ap => (
-                    <TouchableOpacity key={ap}
-                      style={[styles.ampmBtn, timeAmPm === ap && styles.ampmBtnSel]}
-                      onPress={() => { setTimeAmPm(ap); if (timeHour) setTimeHour(null); }}
-                    >
-                      <Text style={[styles.ampmText, timeAmPm === ap && { color: COLORS.white }]}>{ap}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.sectionLabel}>Hour</Text>
-                <View style={styles.hourGrid}>
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => (
-                    <TouchableOpacity key={h}
-                      style={[styles.hourChip, timeHour === h && styles.hourChipSel]}
-                      onPress={() => setTimeHour(h)}
-                    >
-                      <Text style={[styles.hourChipText, timeHour === h && { color: COLORS.white, fontWeight: "800" }]}>{h}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                {timeHour && timeAmPm && (
-                  <View style={styles.timeConfirm}>
-                    <Text style={styles.timeConfirmText}>🕐  {timeHour}:00 {timeAmPm} selected</Text>
-                  </View>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        {/* ── Step 3: Ambulance & Patient ── */}
+        {/* ── Step 2: Ambulance & Patient + Confirm ── */}
         {cur === "ambulance" && (
           <>
             <Text style={styles.q}>Ambulance & Patient</Text>
-            <Text style={styles.qHint}>Select ambulance type and enter patient details</Text>
+            <Text style={styles.qHint}>Select ambulance type, enter patient details and confirm</Text>
 
             <Text style={styles.sectionLabel}>Ambulance type *</Text>
             {AMBULANCE_TYPES.map(a => (
@@ -495,59 +637,25 @@ export default function ScheduleScreen({ navigation }) {
                   thumbColor={COLORS.white} />
               </View>
             </View>
-          </>
-        )}
 
-        {/* ── Step 4: Review & Submit ── */}
-        {cur === "review" && (
-          <>
-            <Text style={styles.q}>Review & Confirm</Text>
-            <Text style={styles.qHint}>Check your schedule before submitting</Text>
-
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewCardHeader}>
-                <Text style={styles.reviewCardIcon}>🗺️</Text>
-                <Text style={styles.reviewCardTitle}>Trip Details</Text>
+            <View style={styles.priceBox}>
+              <View style={styles.priceBoxRow}>
+                <Text style={styles.priceBoxLabel}>Estimated Fare</Text>
+                {!ambulance ? (
+                  <Text style={styles.priceBoxAmountMuted}>—</Text>
+                ) : distLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.red} />
+                ) : (
+                  <Text style={styles.priceBoxAmount}>₹{fare.total.toLocaleString()}</Text>
+                )}
               </View>
-              <SummaryRow label="Pickup"  value={pickupLoc} />
-              <SummaryRow label="Drop"    value={dropLoc} />
-              <SummaryRow label="Type"    value={tripType} />
-              {tripType === "Round Trip" && returnTime.length > 0 &&
-                <SummaryRow label="Return" value={returnTime} />}
-              <SummaryRow label="Purpose" value={selectedPurpose?.label ?? "—"} />
-            </View>
-
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewCardHeader}>
-                <Text style={styles.reviewCardIcon}>📅</Text>
-                <Text style={styles.reviewCardTitle}>Schedule</Text>
-              </View>
-              <SummaryRow label="Frequency" value={scheduleText()} />
-              <SummaryRow label="Time"      value={timeText()} />
-            </View>
-
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewCardHeader}>
-                <Text style={styles.reviewCardIcon}>{selectedAmb?.icon ?? "🚑"}</Text>
-                <Text style={styles.reviewCardTitle}>Ambulance & Patient</Text>
-              </View>
-              <SummaryRow label="Ambulance" value={selectedAmb?.name ?? "—"} />
-              <SummaryRow label="Support"   value={selectedAmb?.tag  ?? "—"} />
-              <SummaryRow label="Patient"   value={patientName} />
-              {patientAge.length > 0 && <SummaryRow label="Age" value={patientAge} />}
-              {condition.length > 0  && <SummaryRow label="Condition" value={condition} />}
-              <SummaryRow label="Add-ons"
-                value={[wheelchair && "Wheelchair", stretcher && "Stretcher"].filter(Boolean).join(", ") || "None"} />
-            </View>
-
-            <View style={styles.pricingBox}>
-              <Text style={styles.pricingIcon}>ℹ️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pricingTitle}>Pricing information</Text>
-                <Text style={styles.pricingText}>
-                  Scheduled ambulance pricing depends on frequency, distance and ambulance type. Our team will confirm the rate after reviewing your schedule.
-                </Text>
-              </View>
+              <Text style={styles.priceBoxHint}>
+                {!ambulance
+                  ? "Select an ambulance type to see live pricing"
+                  : dist != null
+                    ? `For ${dist.toFixed(1)} km · ${selectedAmb?.name}`
+                    : "Calculating distance…"}
+              </Text>
             </View>
           </>
         )}
@@ -563,13 +671,27 @@ export default function ScheduleScreen({ navigation }) {
           onPress={handleNext}
         >
           <Text style={styles.btnText}>
-            {cur === "review" ? "📅  Schedule Ambulance" : "Next →"}
+            {cur === "ambulance" ? "📅  Schedule Ambulance" : "Next →"}
           </Text>
         </TouchableOpacity>
-        {cur === "review" && (
-          <Text style={styles.submitNote}>Our team will call you to confirm the schedule</Text>
+        {cur === "ambulance" && (
+          <Text style={styles.submitNote}>Our team will call you to confirm pickup details</Text>
         )}
       </View>
+
+      {/* Pure-JS date/time wheel picker */}
+      <DateTimePickerModal
+        visible={pickerMode != null}
+        mode={pickerMode || "date"}
+        value={scheduleDate}
+        onConfirm={d => {
+          setScheduleDate(d);
+          if (pickerMode === "date") setDateChosen(true);
+          if (pickerMode === "time") setTimeChosen(true);
+          setPickerMode(null);
+        }}
+        onClose={() => setPickerMode(null)}
+      />
     </View>
   );
 }
@@ -603,6 +725,17 @@ const styles = StyleSheet.create({
   input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 11, fontSize: 13, color: COLORS.text, marginBottom: 4 },
   inputMulti: { height: 80, textAlignVertical: "top" },
 
+  // GPS quick-action row (pickup)
+  gpsRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 2 },
+  gpsIcon: { fontSize: 14 },
+  gpsText: { color: COLORS.red, fontSize: 12, fontWeight: "600", flex: 1 },
+
+  // Places autocomplete dropdown
+  predDropdown: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, marginBottom: 8, overflow: "hidden" },
+  predRow: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.06)" },
+  predMain: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
+  predSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
+
   // Purpose / org chips
   chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
@@ -610,7 +743,7 @@ const styles = StyleSheet.create({
   chipText: { color: COLORS.grayDim, fontSize: 13 },
   chipTextActive: { color: COLORS.red, fontWeight: "600" },
 
-  // Frequency / trip pills
+  // Trip-type pills
   sectionLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10, marginTop: 16 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
@@ -618,36 +751,14 @@ const styles = StyleSheet.create({
   pillText: { color: COLORS.grayDim, fontSize: 13 },
   pillTextActive: { color: COLORS.white, fontWeight: "700" },
 
-  // Weekday pills (square compact)
-  dayPill: { width: 44, alignItems: "center", paddingVertical: 9, borderRadius: 10, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
-
-  // Month day grid
-  monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
-  monthDayChip: { width: 40, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", backgroundColor: "rgba(0,0,0,0.03)" },
-  monthDayText: { color: COLORS.grayDim, fontSize: 13 },
-
-  // Date chips
-  dateChipScroll: { marginTop: 2, marginBottom: 2 },
-  dateChip: { width: 48, height: 60, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)" },
-  dateChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  dateChipDay: { color: COLORS.grayDim, fontSize: 8, fontWeight: "700", letterSpacing: 0.3, marginBottom: 2 },
-  dateChipNum: { color: COLORS.text, fontSize: 17, fontWeight: "800", lineHeight: 20 },
-  dateChipMon: { color: COLORS.grayDim, fontSize: 8, marginTop: 2 },
-
-  // Time picker
-  timeDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.08)", marginVertical: 16 },
-  ampmRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
-  ampmBtn: { flex: 1, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10 },
-  ampmBtnSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  ampmText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700", letterSpacing: 1.5 },
-  hourGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 },
-  hourChip: { width: "23%", height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.04)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10 },
-  hourChipSel: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  hourChipText: { color: COLORS.text, fontSize: 16, fontWeight: "600" },
-  timeConfirm: { padding: 10, backgroundColor: "rgba(232,25,44,0.08)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 10, alignItems: "center" },
-  timeConfirmText: { color: COLORS.red, fontSize: 13, fontWeight: "700" },
+  // Date & time row
+  dateTimeRow: { flexDirection: "row", gap: 8 },
+  dateTimeBtn: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 13 },
+  dateTimeIcon: { fontSize: 16 },
+  dateTimeText: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
 
   // Ambulance option cards
+  timeDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.08)", marginVertical: 16 },
   opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },
   optActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
   optIcon: { width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
@@ -667,24 +778,58 @@ const styles = StyleSheet.create({
   switchDesc: { color: COLORS.grayDim, fontSize: 12, lineHeight: 17, paddingRight: 8 },
   divider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.07)", marginVertical: 14 },
 
-  // Review cards
-  reviewCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.08)", borderRadius: 14, padding: 16, marginBottom: 10 },
-  reviewCardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
-  reviewCardIcon: { fontSize: 18 },
-  reviewCardTitle: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
-  sumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
-  sumLabel: { color: COLORS.grayDim, fontSize: 12, flex: 0.32 },
-  sumValue: { color: COLORS.text, fontSize: 12, fontWeight: "500", flex: 0.68, textAlign: "right" },
-
-  // Pricing info
-  pricingBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "rgba(59,130,246,0.07)", borderWidth: 0.5, borderColor: "rgba(59,130,246,0.25)", borderRadius: 12, padding: 14 },
-  pricingIcon: { fontSize: 18, marginTop: 1 },
-  pricingTitle: { color: "#2563eb", fontSize: 13, fontWeight: "600", marginBottom: 3 },
-  pricingText: { color: "#3b82f6", fontSize: 12, lineHeight: 18 },
+  // Live price summary box
+  priceBox: { backgroundColor: "rgba(34,197,94,0.07)", borderWidth: 0.5, borderColor: "rgba(34,197,94,0.25)", borderRadius: 14, padding: 16, marginTop: 16 },
+  priceBoxRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  priceBoxLabel: { color: COLORS.text, fontSize: 14, fontWeight: "700" },
+  priceBoxAmount: { color: "#16a34a", fontSize: 20, fontWeight: "800" },
+  priceBoxAmountMuted: { color: COLORS.grayDim, fontSize: 20, fontWeight: "800" },
+  priceBoxHint: { color: COLORS.grayDim, fontSize: 12 },
 
   // Footer
   footer: { padding: 18 },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
   submitNote: { color: COLORS.grayDim, fontSize: 12, textAlign: "center", marginTop: 10 },
+});
+
+const pk = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
+  sheet: {
+    backgroundColor: COLORS.bg2,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingBottom: Platform.OS === "ios" ? 36 : 22,
+    maxHeight: "75%",
+  },
+  handle: {
+    width: 36, height: 4, backgroundColor: "rgba(0,0,0,0.12)",
+    borderRadius: 2, alignSelf: "center", marginTop: 10, marginBottom: 6,
+  },
+  header: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 18, paddingVertical: 12,
+    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
+  },
+  title: { flex: 1, color: COLORS.text, fontSize: 16, fontWeight: "700" },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center",
+  },
+  closeX: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700" },
+  list: { flex: 1 },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingHorizontal: 18, height: ITEM_H,
+    borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  rowActive: { backgroundColor: "rgba(232,25,44,0.07)" },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "rgba(0,0,0,0.15)" },
+  dotActive: { backgroundColor: COLORS.red },
+  rowMain: { color: COLORS.text, fontSize: 15, fontWeight: "500" },
+  rowMainActive: { color: COLORS.text, fontWeight: "700" },
+  rowSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  check: { color: COLORS.red, fontSize: 18, fontWeight: "700" },
+  footer: { paddingHorizontal: 18, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: COLORS.border },
+  confirmBtn: { backgroundColor: COLORS.red, borderRadius: 14, paddingVertical: 15, alignItems: "center" },
+  confirmTxt: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
 });
