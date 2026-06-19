@@ -2,24 +2,24 @@ import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from "react-native";
-import { COLORS, getBookingConfig } from "../theme";
-import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { COLORS } from "../theme";
+import { calcFare, PRICING_API, SERVICE_TYPE_ALIAS } from "../utils/pricingUtils";
 
-const _bls = getBookingConfig("bls");
-const _adv = getBookingConfig("als");
-
-const AMB_RATES = {
-  bls:        { km: _bls.vehicles[0].rate, base: 0,    label: "Basic Life Support" },
-  bls_tempo:  {                            base: 0,    label: "Basic Life Support • Tempo Traveller" },
-  als:        { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support" },
-  als_tempo:  { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support • Tempo Traveller" },
-  acls_tempo: { km: 30,                    base: 1000, label: "Advanced Cardiac Life Support • Tempo Traveller" },
-  icu:        { km: _adv.vehicles[1].rate, base: 800,  label: "Mobile Intensive Care" },
-  nicu_tempo: { km: 25,                    base: 600,  label: "Newborn Intensive Care Transport • Tempo Traveller" },
-  neo:        { km: 25,                    base: 600,  label: "Neonatal Transport" },
-  card:       { km: 30,                    base: 1000, label: "Cardiac Emergency" },
-  deadbody:   { km: 18,                    base: 350,  label: "Dignified Transport Service" },
-  mort:       { km: 18,                    base: 350,  label: "Mortuary / Remains" },
+// Cosmetic display label only — real fares come live from the pricing API
+// (see src/utils/pricingUtils.js). Covers ids from both the DestinationScreen
+// catalog and the ScheduleScreen catalog.
+const AMB_LABELS = {
+  bls:        { label: "Basic Life Support" },
+  bls_tempo:  { label: "Basic Life Support • Tempo Traveller" },
+  als:        { label: "Advanced Life Support" },
+  als_tempo:  { label: "Advanced Life Support • Tempo Traveller" },
+  acls_tempo: { label: "Advanced Cardiac Life Support • Tempo Traveller" },
+  icu:        { label: "Mobile Intensive Care" },
+  nicu_tempo: { label: "Newborn Intensive Care Transport • Tempo Traveller" },
+  neo:        { label: "Neonatal Transport" },
+  card:       { label: "Cardiac Emergency" },
+  deadbody:   { label: "Dignified Transport Service" },
+  mort:       { label: "Mortuary / Remains" },
 };
 
 function fmtDateTime(iso) {
@@ -65,12 +65,13 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   }, []);
 
   const amb = selectedAmb || { icon: "🚑", name: "Ambulance", desc: "" };
-  const info = AMB_RATES[selectedType] || AMB_RATES.bls;
+  const info = AMB_LABELS[selectedType] || AMB_LABELS.bls;
 
-  const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
+  const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_LABELS);
 
   // AC price: use per-km from API doc if available, else flat fallback
-  const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
+  const acServiceType = SERVICE_TYPE_ALIAS[selectedType] || selectedType;
+  const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === acServiceType && p.active !== false);
   const acPrice = pricingDoc?.acPerKm ? Math.round(pricingDoc.acPerKm * dist) : 200;
 
   const total = baseFareTotal + (acEnabled ? acPrice : 0);

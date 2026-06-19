@@ -1,5 +1,13 @@
 export const PRICING_API = "https://api.savelife.health/api/pricing";
 
+// App-side ambulance ids that don't have a 1:1 serviceType in MongoDB.
+// "deadbody" merges what used to be two separate vehicle options
+// (BODY_MINI / BODY_TEMPO) into one — BODY_MINI is the cheaper one and
+// is used as the single quoted rate.
+export const SERVICE_TYPE_ALIAS = {
+  deadbody: "body_mini",
+};
+
 /**
  * Returns { distFare, base, total } for any ambulance type.
  *
@@ -10,11 +18,12 @@ export const PRICING_API = "https://api.savelife.health/api/pricing";
  * @param {string}   typeId        e.g. "bls", "als"
  * @param {number}   km            trip distance
  * @param {Array}    pricingList   response from GET /api/pricing
- * @param {object}   fallbackRates local AMB_RATES object keyed by typeId
+ * @param {object}   fallbackRates local rates object keyed by typeId
  */
 export function calcFare(typeId, km, pricingList, fallbackRates) {
+  const serviceType = SERVICE_TYPE_ALIAS[typeId] || typeId;
   const doc = pricingList.find(
-    p => p.serviceType?.toLowerCase() === typeId && p.active !== false
+    p => p.serviceType?.toLowerCase() === serviceType && p.active !== false
   );
 
   if (doc?.slabs?.length >= 2) {
@@ -46,7 +55,8 @@ export function calcFare(typeId, km, pricingList, fallbackRates) {
     return { distFare: fare, base: 0, total: fare };
   }
 
-  // Fallback: local per-km rates (only for types that define km in AMB_RATES)
+  // Fallback if no live pricing doc matched (e.g. API unreachable) — returns
+  // 0 unless fallbackRates[typeId] still defines a local km rate.
   const info = fallbackRates[typeId];
   if (!info?.km) return { distFare: 0, base: 0, total: 0 };
   const distFare = Math.round(info.km * km);

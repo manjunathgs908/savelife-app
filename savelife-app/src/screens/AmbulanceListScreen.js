@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
-import { AMBULANCE_TYPES, AMB_RATES } from "../utils/ambulanceCatalog";
+import { AMBULANCE_TYPES, AMB_DISPLAY } from "../utils/ambulanceCatalog";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -252,7 +252,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
     fetch(PRICING_API)
       .then(r => r.json())
       .then(d => { if (d.success) setPricingList(d.pricing); })
-      .catch(() => {}); // silent fallback to local AMB_RATES
+      .catch(() => {}); // silent fallback — calcFare returns 0 if pricingList is empty
   }, []);
 
   // Distance/duration via Directions API with a straight-line Haversine fallback.
@@ -396,8 +396,8 @@ export default function AmbulanceListScreen({ navigation, route }) {
         <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
 
         {AMBULANCE_TYPES.map(amb => {
-          const info     = AMB_RATES[amb.id];
-          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
+          const info     = AMB_DISPLAY[amb.id];
+          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_DISPLAY).total;
           const isActive = selectedAmbType === amb.id;
 
           return (
@@ -423,8 +423,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
                   <Text style={styles.ambDesc}>{amb.desc}</Text>
                   <View style={styles.metaRow}>
                     <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                    {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
-                    {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
+                    <Text style={styles.metaChip}>Slab pricing</Text>
                   </View>
                 </View>
 
@@ -449,7 +448,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
-          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.</Text>
+          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_DISPLAY).total.toLocaleString()} est.</Text>
         </View>
         <TouchableOpacity style={styles.nextBtn} onPress={handleConfirmType} activeOpacity={0.85}>
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>

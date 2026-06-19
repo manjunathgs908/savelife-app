@@ -9,7 +9,7 @@ import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
-import { AMBULANCE_TYPES, AMB_RATES, AMB_FEATURES } from "../utils/ambulanceCatalog";
+import { AMBULANCE_TYPES, AMB_DISPLAY, AMB_FEATURES } from "../utils/ambulanceCatalog";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -592,7 +592,7 @@ export default function DestinationScreen({ navigation, route }) {
     if (filterType === "deadbody") {
       return AMBULANCE_TYPES.filter(a => a.id === "deadbody");
     }
-    return AMBULANCE_TYPES;
+    return AMBULANCE_TYPES.filter(a => a.id !== "deadbody");
   }, [filterType]);
 
   const [selectedAmbType, setSelectedAmbType] = useState(
@@ -607,7 +607,7 @@ export default function DestinationScreen({ navigation, route }) {
     fetch(PRICING_API)
       .then(r => r.json())
       .then(d => { if (d.success) setPricingList(d.pricing); })
-      .catch(() => {}); // silent fallback to local AMB_RATES
+      .catch(() => {}); // silent fallback — calcFare returns 0 if pricingList is empty
   }, []);
 
   // ── GPS resolution + full-address lookup for the Pickup field ─────────────
@@ -1104,8 +1104,8 @@ export default function DestinationScreen({ navigation, route }) {
             </Text>
 
             {filteredAmbulanceTypes.map(amb => {
-              const info = AMB_RATES[amb.id];
-              const est = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
+              const info = AMB_DISPLAY[amb.id];
+              const est = calcFare(amb.id, dist ?? 0, pricingList, AMB_DISPLAY).total;
               const isActive = selectedAmbType === amb.id;
 
               return (
@@ -1131,8 +1131,7 @@ export default function DestinationScreen({ navigation, route }) {
                         <Text style={s.ambDesc}>{amb.desc}</Text>
                         <View style={s.metaRow}>
                           <Text style={s.metaChip}>⏱ ~{info.eta} min away</Text>
-                          {info.km ? <Text style={s.metaChip}>₹{info.km}/km</Text> : <Text style={s.metaChip}>Slab pricing</Text>}
-                          {info.base > 0 && <Text style={s.metaChip}>+₹{info.base} base</Text>}
+                          <Text style={s.metaChip}>Slab pricing</Text>
                         </View>
                       </View>
 
@@ -1166,9 +1165,7 @@ export default function DestinationScreen({ navigation, route }) {
             <View style={s.noteBox}>
               <Text style={s.noteIco}>ℹ️</Text>
               <Text style={s.noteTxt}>
-                {calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).base === 0
-                  ? `Estimated fare uses slab pricing for ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`
-                  : `Estimated fare = base charge + ₹${AMB_RATES[selectedAmbType].km}/km × ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`}
+                {`Estimated fare uses slab pricing for ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`}
               </Text>
             </View>
 
@@ -1187,7 +1184,7 @@ export default function DestinationScreen({ navigation, route }) {
                   Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}
                 </Text>
                 <Text style={s.footerPrice}>
-                  ₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.
+                  ₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_DISPLAY).total.toLocaleString()} est.
                 </Text>
               </View>
               <TouchableOpacity style={s.confirmBookingBtn} onPress={handleConfirmBooking} activeOpacity={0.85}>

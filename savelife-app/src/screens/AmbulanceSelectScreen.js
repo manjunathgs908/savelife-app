@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
-import { AMBULANCE_TYPES, AMB_RATES, AMB_FEATURES } from "../utils/ambulanceCatalog";
+import { AMBULANCE_TYPES, AMB_DISPLAY, AMB_FEATURES } from "../utils/ambulanceCatalog";
 
 function fmtDate(iso) {
   if (!iso) return null;
@@ -24,11 +24,10 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
     fetch(PRICING_API)
       .then(r => r.json())
       .then(d => { if (d.success) setPricingList(d.pricing); })
-      .catch(() => {}); // silent fallback to local AMB_RATES
+      .catch(() => {}); // silent fallback — calcFare returns 0 if pricingList is empty
   }, []);
 
-  const r = AMB_RATES[selected];
-  const estTotal = calcFare(selected, dist, pricingList, AMB_RATES).total;
+  const estTotal = calcFare(selected, dist, pricingList, AMB_DISPLAY).total;
 
   function handleNext() {
     navigation.navigate("ConfirmBooking", {
@@ -88,8 +87,8 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
         <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
 
         {AMBULANCE_TYPES.map(amb => {
-          const info = AMB_RATES[amb.id];
-          const est = calcFare(amb.id, dist, pricingList, AMB_RATES).total;
+          const info = AMB_DISPLAY[amb.id];
+          const est = calcFare(amb.id, dist, pricingList, AMB_DISPLAY).total;
           const isActive = selected === amb.id;
 
           return (
@@ -118,8 +117,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
                     <Text style={styles.ambDesc}>{amb.desc}</Text>
                     <View style={styles.metaRow}>
                       <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                      {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
-                      {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
+                      <Text style={styles.metaChip}>Slab pricing</Text>
                     </View>
                   </View>
 
@@ -156,10 +154,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
         <View style={styles.noteBox}>
           <Text style={styles.noteIco}>ℹ️</Text>
           <Text style={styles.noteTxt}>
-            {calcFare(selected, dist, pricingList, AMB_RATES).base === 0
-              ? `Estimated fare uses slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`
-              : `Estimated fare = base charge + ₹${r.km}/km × ${dist.toFixed(1)} km. Final amount confirmed after booking.`
-            }
+            {`Estimated fare uses slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`}
           </Text>
         </View>
 
