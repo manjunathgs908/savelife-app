@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  View, Text, TouchableOpacity, TextInput, FlatList,
+  View, Text, TouchableOpacity, TextInput, FlatList, ScrollView,
   StyleSheet, Platform, ActivityIndicator, Modal,
 } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { AMBULANCE_TYPES, AMB_RATES, AMB_FEATURES } from "../utils/ambulanceCatalog";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -89,6 +92,29 @@ function fmtTime(d) {
   const ampm = h < 12 ? "AM" : "PM";
   const h12 = h % 12 || 12;
   return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+function fmtScheduleBadge(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", {
+    weekday: "short", day: "numeric", month: "short",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function decodePolyline(encoded) {
+  const pts = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = result = 0;
+    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return pts;
 }
 
 // ─── "Who needs this ambulance?" — patient details, shown before editing pickup
@@ -552,8 +578,21 @@ export default function DestinationScreen({ navigation, route }) {
   const [dist, setDist]                 = useState(null);
   const [duration, setDuration]         = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [routeCoords, setRouteCoords]   = useState([]);
+
+  // Vehicle-selection phase (shown once destCoord is set)
+  const [selectedAmbType, setSelectedAmbType] = useState("bls");
+  const [pricingList,     setPricingList]     = useState([]);
 
   const debRef = useRef(null);
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    fetch(PRICING_API)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .catch(() => {}); // silent fallback to local AMB_RATES
+  }, []);
 
   // ── GPS resolution + full-address lookup for the Pickup field ─────────────
   useEffect(() => {
@@ -610,7 +649,7 @@ export default function DestinationScreen({ navigation, route }) {
 
   // ── Route preview once destination is chosen ──────────────────────────────
   useEffect(() => {
-    if (!pickupCoord || !destCoord) { setDist(null); setDuration(null); return; }
+    if (!pickupCoord || !destCoord) { setDist(null); setDuration(null); setRouteCoords([]); return; }
 
     function haversineFallback() {
       const R = 6371;
@@ -624,6 +663,7 @@ export default function DestinationScreen({ navigation, route }) {
       const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       setDist(parseFloat(km.toFixed(1)));
       setDuration(Math.round((km / 30) * 3600));
+      setRouteCoords([pickupCoord, destCoord]); // straight-line fallback
     }
 
     setRouteLoading(true);
@@ -640,6 +680,7 @@ export default function DestinationScreen({ navigation, route }) {
           const leg = d.routes[0].legs[0];
           setDist(leg.distance.value / 1000);
           setDuration(leg.duration.value);
+          setRouteCoords(decodePolyline(d.routes[0].overview_polyline.points));
         } else {
           haversineFallback();
         }
@@ -650,6 +691,18 @@ export default function DestinationScreen({ navigation, route }) {
       }
     })();
   }, [pickupCoord, destCoord]);
+
+  // ── Fit the map to show both pickup and drop once the route is known ──────
+  useEffect(() => {
+    if (!destCoord || !pickupCoord) return;
+    const t = setTimeout(() => {
+      mapRef.current?.fitToCoordinates([pickupCoord, destCoord], {
+        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+        animated: true,
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [destCoord, pickupCoord]);
 
   // ── Destination search ─────────────────────────────────────────────────────
   function onChangeQuery(text) {
@@ -763,9 +816,21 @@ export default function DestinationScreen({ navigation, route }) {
     setScheduleDetailVisible(false);
   }
 
-  // ── Proceed to ambulance type selection — exact contract AmbulanceSelectScreen expects
-  function handleFindAmbulance() {
-    navigation.navigate("AmbulanceSelect", {
+  // Back button: in the vehicle-selection phase, step back to the search
+  // phase instead of leaving the screen entirely.
+  function handleBack() {
+    if (destCoord) {
+      setDestCoord(null);
+      setDestLabel("");
+    } else {
+      navigation.goBack();
+    }
+  }
+
+  // Same param shape AmbulanceSelectScreen.js always sent to ConfirmBooking —
+  // this screen now skips that intermediate screen but preserves its exact contract.
+  function handleConfirmBooking() {
+    navigation.navigate("ConfirmBooking", {
       pickupLabel,
       dropLabel: destLabel,
       dist: dist ?? 5,
@@ -775,6 +840,9 @@ export default function DestinationScreen({ navigation, route }) {
       patientType,
       contactName,
       contactPhone,
+      selectedType: selectedAmbType,
+      selectedAmb: AMBULANCE_TYPES.find(a => a.id === selectedAmbType),
+      pricingList,
     });
   }
 
@@ -868,87 +936,248 @@ export default function DestinationScreen({ navigation, route }) {
     <View style={s.root}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <TouchableOpacity style={s.backBtn} onPress={handleBack} activeOpacity={0.7}>
           <Text style={s.backArrow}>←</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Ambulance Request Details</Text>
+        <Text style={s.headerTitle}>
+          {destCoord ? "Choose Ambulance" : "Ambulance Request Details"}
+        </Text>
       </View>
 
-      {/* Pickup + Destination input rows, with Now/Schedule button */}
-      <View style={s.inputCardRow}>
-        <View style={s.inputCard}>
-          <TouchableOpacity style={[s.inputRow, s.pickupRow]} onPress={handlePickupTap} activeOpacity={0.7}>
-            <View style={[s.dotGreen, s.dotTopAligned]} />
-            {gpsLoading ? (
-              <ActivityIndicator size="small" color={COLORS.red} />
-            ) : (
-              <Text style={s.inputTxt}>{pickupLabel}</Text>
-            )}
-          </TouchableOpacity>
+      {!destCoord ? (
+        <>
+          {/* Pickup + Destination input rows, with Now/Schedule button */}
+          <View style={s.inputCardRow}>
+            <View style={s.inputCard}>
+              <TouchableOpacity style={s.inputRow} onPress={handlePickupTap} activeOpacity={0.7}>
+                <View style={s.dotGreen} />
+                {gpsLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.red} />
+                ) : (
+                  <Text style={s.inputTxt} numberOfLines={1}>{pickupLabel}</Text>
+                )}
+              </TouchableOpacity>
 
-          <View style={s.inputDivider} />
+              <View style={s.inputDivider} />
 
-          <View style={s.inputRow}>
-            <View style={s.dotRed} />
-            <TextInput
-              style={s.destInput}
-              placeholder="Enter Hospital Name or Destination"
-              placeholderTextColor={COLORS.grayDim}
-              value={destCoord ? destLabel : query}
-              onChangeText={text => { if (destCoord) { setDestCoord(null); setDestLabel(""); } onChangeQuery(text); }}
-              returnKeyType="search"
-            />
-            {phase === "loading" && <ActivityIndicator size="small" color={COLORS.red} />}
+              <View style={s.inputRow}>
+                <View style={s.dotRed} />
+                <TextInput
+                  style={s.destInput}
+                  placeholder="Enter Hospital Name or Destination"
+                  placeholderTextColor={COLORS.grayDim}
+                  value={query}
+                  onChangeText={onChangeQuery}
+                  returnKeyType="search"
+                />
+                {phase === "loading" && <ActivityIndicator size="small" color={COLORS.red} />}
+              </View>
+            </View>
+
+            <TouchableOpacity style={s.nowBtn} onPress={() => setScheduleTypeVisible(true)} activeOpacity={0.85}>
+              <Text style={s.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+              <Text style={s.nowBtnTxt}>{scheduleType === "later" ? "Sched." : "Now"}</Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        <TouchableOpacity style={s.nowBtn} onPress={() => setScheduleTypeVisible(true)} activeOpacity={0.85}>
-          <Text style={s.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
-          <Text style={s.nowBtnTxt}>{scheduleType === "later" ? "Sched." : "Now"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Route card once destination is chosen */}
-      {destCoord && (
-        <View style={s.routeCard}>
-          <Text style={s.routeDistTxt}>
-            {routeLoading ? "Calculating route…" : `${dist?.toFixed(1)} km · ~${Math.round((duration ?? 0) / 60)} min`}
-          </Text>
-        </View>
-      )}
-
-      {/* Body: predictions while typing, otherwise favourites / recents / hospitals */}
-      {phase === "empty" ? (
-        <View style={s.emptyState}>
-          <Text style={s.emptyIco}>🔍</Text>
-          <Text style={s.emptyTitle}>No results found</Text>
-          <Text style={s.emptySub}>Try a different hospital name or address</Text>
-        </View>
-      ) : phase === "results" ? (
-        <FlatList
-          data={predictions}
-          keyExtractor={item => item.place_id}
-          keyboardShouldPersistTaps="handled"
-          renderItem={renderPredictionItem}
-          contentContainerStyle={s.listContent}
-        />
+          {/* Body: predictions while typing, otherwise favourites / recents / hospitals */}
+          {phase === "empty" ? (
+            <View style={s.emptyState}>
+              <Text style={s.emptyIco}>🔍</Text>
+              <Text style={s.emptyTitle}>No results found</Text>
+              <Text style={s.emptySub}>Try a different hospital name or address</Text>
+            </View>
+          ) : phase === "results" ? (
+            <FlatList
+              data={predictions}
+              keyExtractor={item => item.place_id}
+              keyboardShouldPersistTaps="handled"
+              renderItem={renderPredictionItem}
+              contentContainerStyle={s.listContent}
+            />
+          ) : (
+            <FlatList
+              data={idleListData}
+              keyExtractor={item => item.id}
+              keyboardShouldPersistTaps="handled"
+              renderItem={renderIdleItem}
+              contentContainerStyle={s.listContent}
+            />
+          )}
+        </>
       ) : (
-        <FlatList
-          data={idleListData}
-          keyExtractor={item => item.id}
-          keyboardShouldPersistTaps="handled"
-          renderItem={renderIdleItem}
-          contentContainerStyle={s.listContent}
-        />
-      )}
+        <>
+          {/* Map showing the route between pickup and drop */}
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_GOOGLE}
+            style={s.map}
+            initialRegion={{
+              latitude: pickupCoord.latitude,
+              longitude: pickupCoord.longitude,
+              latitudeDelta: 0.06,
+              longitudeDelta: 0.06,
+            }}
+            showsMyLocationButton={false}
+            showsCompass={false}
+            toolbarEnabled={false}
+          >
+            <Marker coordinate={pickupCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <View style={s.pickupMarker} />
+            </Marker>
+            <Marker coordinate={destCoord} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+              <View style={s.dropMarker} />
+            </Marker>
+            {routeCoords.length > 0 && (
+              <Polyline
+                coordinates={routeCoords}
+                strokeColor={COLORS.red}
+                strokeWidth={4}
+                lineCap="round"
+                lineJoin="round"
+              />
+            )}
+          </MapView>
 
-      {/* Final CTA once destination + route are known */}
-      {destCoord && (
-        <View style={s.footer}>
-          <TouchableOpacity style={s.findAmbBtn} onPress={handleFindAmbulance} activeOpacity={0.85}>
-            <Text style={s.findAmbTxt}>Find Ambulance  →</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Compact route summary + Now/Schedule button */}
+          <View style={s.vsRouteRow}>
+            <View style={s.vsRouteBar}>
+              <View style={s.routeEndpoint}>
+                <View style={s.greenDotSm} />
+                <Text style={s.routeAddr} numberOfLines={1}>{pickupLabel}</Text>
+              </View>
+              <View style={s.routeMid}>
+                <View style={s.routeLine} />
+                <View style={s.routeDistPill}>
+                  {routeLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.red} />
+                  ) : (
+                    <Text style={s.routeDistTxt}>
+                      {dist?.toFixed(1)} km · ~{Math.round((duration ?? 0) / 60)} min
+                    </Text>
+                  )}
+                </View>
+                <View style={s.routeLine} />
+              </View>
+              <View style={s.routeEndpoint}>
+                <View style={s.redDotSm} />
+                <Text style={s.routeAddr} numberOfLines={1}>{destLabel}</Text>
+              </View>
+
+              {scheduleType === "later" && (
+                <View style={s.schedBadge}>
+                  <Text style={s.schedBadgeTxt}>🕐  {fmtScheduleBadge(scheduleDate.toISOString())}</Text>
+                </View>
+              )}
+            </View>
+
+            <TouchableOpacity style={s.nowBtn} onPress={() => setScheduleTypeVisible(true)} activeOpacity={0.85}>
+              <Text style={s.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+              <Text style={s.nowBtnTxt}>{scheduleType === "later" ? "Sched." : "Now"}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Ambulance type list — ported from AmbulanceSelectScreen.js */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={s.listContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={s.listHeading}>ALL AMBULANCE TYPES</Text>
+
+            {AMBULANCE_TYPES.map(amb => {
+              const info = AMB_RATES[amb.id];
+              const est = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
+              const isActive = selectedAmbType === amb.id;
+
+              return (
+                <React.Fragment key={amb.id}>
+                  <TouchableOpacity
+                    style={[s.card, isActive && s.cardActive]}
+                    onPress={() => setSelectedAmbType(amb.id)}
+                    activeOpacity={0.8}
+                  >
+                    {info.badge ? (
+                      <View style={[s.badge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
+                        <Text style={[s.badgeTxt, { color: info.color }]}>{info.badge}</Text>
+                      </View>
+                    ) : null}
+
+                    <View style={s.cardMain}>
+                      <View style={[s.iconBox, isActive && { backgroundColor: COLORS.red + "22" }]}>
+                        <Text style={{ fontSize: 28 }}>{amb.icon}</Text>
+                      </View>
+
+                      <View style={s.cardInfo}>
+                        <Text style={s.ambName}>{amb.name}</Text>
+                        <Text style={s.ambDesc}>{amb.desc}</Text>
+                        <View style={s.metaRow}>
+                          <Text style={s.metaChip}>⏱ ~{info.eta} min away</Text>
+                          {info.km ? <Text style={s.metaChip}>₹{info.km}/km</Text> : <Text style={s.metaChip}>Slab pricing</Text>}
+                          {info.base > 0 && <Text style={s.metaChip}>+₹{info.base} base</Text>}
+                        </View>
+                      </View>
+
+                      <View style={s.priceCol}>
+                        <Text style={[s.priceTotal, isActive && { color: COLORS.red }]}>
+                          ₹{est.toLocaleString()}
+                        </Text>
+                        <Text style={s.priceEst}>est.</Text>
+                        <View style={[s.radio, isActive && s.radioActive]}>
+                          {isActive && <View style={s.radioDot} />}
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {isActive && AMB_FEATURES[amb.id] && (
+                    <View style={s.featuresBox}>
+                      <Text style={s.featuresTitle}>Included Equipment</Text>
+                      {AMB_FEATURES[amb.id].map(f => (
+                        <View key={f} style={s.featureRow}>
+                          <Text style={s.featureCheck}>✓</Text>
+                          <Text style={s.featureTxt}>{f}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            <View style={s.noteBox}>
+              <Text style={s.noteIco}>ℹ️</Text>
+              <Text style={s.noteTxt}>
+                {calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).base === 0
+                  ? `Estimated fare uses slab pricing for ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`
+                  : `Estimated fare = base charge + ₹${AMB_RATES[selectedAmbType].km}/km × ${(dist ?? 0).toFixed(1)} km. Final amount confirmed after booking.`}
+              </Text>
+            </View>
+
+            <View style={{ height: 20 }} />
+          </ScrollView>
+
+          {/* Payment method + Confirm Booking */}
+          <View style={s.vsFooter}>
+            <View style={s.paymentRow}>
+              <Text style={s.paymentIco}>💵</Text>
+              <Text style={s.paymentTxt}>Cash</Text>
+            </View>
+            <View style={s.footerBottomRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.footerLabel}>
+                  Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}
+                </Text>
+                <Text style={s.footerPrice}>
+                  ₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.
+                </Text>
+              </View>
+              <TouchableOpacity style={s.confirmBookingBtn} onPress={handleConfirmBooking} activeOpacity={0.85}>
+                <Text style={s.confirmBookingTxt}>Confirm Booking  →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
       )}
 
       {/* "Who needs this ambulance?" — shown before editing pickup */}
@@ -1022,15 +1251,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13 },
-  // Pickup shows a full multi-line address — align the dot to the first
-  // line instead of the vertical center of the whole wrapped block.
-  pickupRow: { alignItems: "flex-start" },
   inputDivider: { height: 0.5, backgroundColor: COLORS.border },
   dotGreen: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#22c55e", flexShrink: 0 },
   dotRed:   { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red, flexShrink: 0 },
-  dotTopAligned: { marginTop: 5 },
-  // No numberOfLines/maxWidth clamp — the full address must never be cut off.
-  inputTxt: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: "600", lineHeight: 19 },
+  inputTxt: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: "600" },
   destInput: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: "600" },
 
   nowBtn: {
@@ -1041,13 +1265,134 @@ const s = StyleSheet.create({
   nowBtnIco: { fontSize: 18, marginBottom: 2 },
   nowBtnTxt: { fontSize: 10, fontWeight: "700", color: COLORS.text },
 
-  routeCard: {
-    marginHorizontal: 16, marginTop: 10,
-    backgroundColor: "#fff0f1", borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: "rgba(232,25,44,0.2)",
+  // ── Vehicle-selection phase: map + compact route summary ───────────────────
+  map: { width: "100%", height: 240 },
+  pickupMarker: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#22c55e", borderWidth: 3, borderColor: "#fff",
   },
-  routeDistTxt: { color: COLORS.red, fontSize: 12.5, fontWeight: "700" },
+  dropMarker: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.red, borderWidth: 3, borderColor: "#fff",
+  },
+
+  vsRouteRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 12 },
+  vsRouteBar: {
+    flex: 1,
+    backgroundColor: COLORS.bg2,
+    borderRadius: 14, borderWidth: 0.5, borderColor: COLORS.border,
+    paddingHorizontal: 14, paddingVertical: 12, gap: 8,
+  },
+  routeEndpoint: { flexDirection: "row", alignItems: "center", gap: 10 },
+  greenDotSm: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.green },
+  redDotSm:   { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
+  routeAddr: { flex: 1, color: COLORS.text, fontSize: 12, fontWeight: "500" },
+  routeMid: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 4 },
+  routeLine: { flex: 1, height: 0.5, backgroundColor: COLORS.border },
+  routeDistPill: {
+    backgroundColor: COLORS.bg3,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100,
+    minWidth: 80, alignItems: "center",
+  },
+  routeDistTxt: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
+  schedBadge: {
+    backgroundColor: "rgba(232,25,44,0.12)",
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: "flex-start",
+    borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)",
+  },
+  schedBadgeTxt: { color: COLORS.red, fontSize: 12, fontWeight: "600" },
+
+  // ── Ambulance type cards (ported from AmbulanceSelectScreen.js) ────────────
+  listHeading: {
+    color: COLORS.grayDim, fontSize: 11, fontWeight: "700",
+    letterSpacing: 1.2, marginBottom: 12,
+  },
+  card: {
+    backgroundColor: COLORS.bg2,
+    borderRadius: 16, borderWidth: 0.5, borderColor: COLORS.border,
+    marginBottom: 10, padding: 14, overflow: "hidden",
+  },
+  cardActive: {
+    backgroundColor: "rgba(232,25,44,0.07)",
+    borderColor: "rgba(232,25,44,0.45)",
+  },
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: 6, borderWidth: 0.5,
+    paddingHorizontal: 8, paddingVertical: 3,
+    marginBottom: 10,
+  },
+  badgeTxt: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+  cardMain: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconBox: {
+    width: 54, height: 54, borderRadius: 14,
+    backgroundColor: COLORS.bg3,
+    alignItems: "center", justifyContent: "center",
+  },
+  cardInfo: { flex: 1 },
+  ambName: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
+  ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 7 },
+  metaChip: {
+    color: COLORS.grayDim, fontSize: 10,
+    backgroundColor: COLORS.bg3,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
+  },
+  priceCol: { alignItems: "flex-end", gap: 4 },
+  priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
+  priceEst: { color: COLORS.grayDim, fontSize: 10 },
+  radio: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+    marginTop: 4,
+  },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
+
+  featuresBox: {
+    backgroundColor: "rgba(34,197,94,0.06)",
+    borderRadius: 14, borderWidth: 0.5, borderColor: "rgba(34,197,94,0.2)",
+    padding: 14, marginBottom: 10,
+  },
+  featuresTitle: {
+    color: COLORS.green, fontSize: 11, fontWeight: "700",
+    letterSpacing: 0.8, marginBottom: 10,
+  },
+  featureRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
+  featureCheck: { color: COLORS.green, fontSize: 13, fontWeight: "700", width: 16 },
+  featureTxt: { color: COLORS.text, fontSize: 13 },
+
+  noteBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#eff6ff",
+    borderRadius: 12, padding: 12, marginTop: 4,
+    borderWidth: 0.5, borderColor: "rgba(59,130,246,0.2)",
+  },
+  noteIco: { fontSize: 16, marginTop: 1 },
+  noteTxt: { flex: 1, color: "#3b82f6", fontSize: 12, lineHeight: 17 },
+
+  // ── Payment + Confirm Booking footer ────────────────────────────────────────
+  vsFooter: {
+    paddingHorizontal: 16, paddingTop: 10, paddingVertical: 12,
+    borderTopWidth: 0.5, borderTopColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+  },
+  paymentRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginBottom: 12,
+  },
+  paymentIco: { fontSize: 16 },
+  paymentTxt: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
+  footerBottomRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
+  footerPrice: { color: COLORS.text, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  confirmBookingBtn: {
+    backgroundColor: COLORS.red,
+    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20,
+  },
+  confirmBookingTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 
   listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
   sectionHdr: {
@@ -1081,19 +1426,6 @@ const s = StyleSheet.create({
   emptyIco:   { fontSize: 36, marginBottom: 12 },
   emptyTitle: { fontSize: 15, fontWeight: "700", color: COLORS.text, marginBottom: 6 },
   emptySub:   { fontSize: 13, color: COLORS.grayDim, textAlign: "center" },
-
-  footer: {
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderTopWidth: 0.5, borderTopColor: COLORS.border,
-    backgroundColor: COLORS.bg,
-  },
-  findAmbBtn: {
-    backgroundColor: COLORS.red, borderRadius: 14, paddingVertical: 16,
-    alignItems: "center",
-    shadowColor: COLORS.red, shadowOpacity: 0.38, shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 }, elevation: 8,
-  },
-  findAmbTxt: { color: "#fff", fontSize: 16, fontWeight: "800" },
 
   // ── Pickup-edit sheet (full list, taller than the generic bsh.sheet) ───────
   editSheet: {
