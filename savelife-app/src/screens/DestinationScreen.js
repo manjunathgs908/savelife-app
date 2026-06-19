@@ -585,20 +585,34 @@ export default function DestinationScreen({ navigation, route }) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeCoords, setRouteCoords]   = useState([]);
 
+  const [pricingList, setPricingList] = useState([]);
+
   // Vehicle-selection phase (shown once destCoord is set) — filtered to just
   // the relevant catalog entries when the card that opened this screen
   // targets one specific ambulance category.
+  //
+  // Dead Body Transport is strict: only BODY_MINI / BODY_TEMPO, gated on the
+  // live MongoDB pricing doc actually being present and active. Before the
+  // pricing fetch resolves, pricingList is empty — fall back to showing both
+  // catalog entries so the grid isn't blank during that brief window.
   const filteredAmbulanceTypes = useMemo(() => {
     if (filterType === "deadbody") {
-      return AMBULANCE_TYPES.filter(a => a.id === "deadbody");
+      if (!pricingList.length) {
+        return AMBULANCE_TYPES.filter(a => a.id === "body_mini" || a.id === "body_tempo");
+      }
+      const activeBodyTypes = new Set(
+        pricingList
+          .filter(p => p.active !== false && (p.serviceType === "BODY_MINI" || p.serviceType === "BODY_TEMPO"))
+          .map(p => p.serviceType.toLowerCase())
+      );
+      return AMBULANCE_TYPES.filter(a => activeBodyTypes.has(a.id));
     }
-    return AMBULANCE_TYPES.filter(a => a.id !== "deadbody");
-  }, [filterType]);
+    return AMBULANCE_TYPES.filter(a => a.id !== "body_mini" && a.id !== "body_tempo");
+  }, [filterType, pricingList]);
 
   const [selectedAmbType, setSelectedAmbType] = useState(
     filteredAmbulanceTypes[0]?.id ?? "bls"
   );
-  const [pricingList,     setPricingList]     = useState([]);
 
   const debRef = useRef(null);
   const mapRef = useRef(null);

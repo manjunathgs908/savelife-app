@@ -1,13 +1,5 @@
 export const PRICING_API = "https://api.savelife.health/api/pricing";
 
-// App-side ambulance ids that don't have a 1:1 serviceType in MongoDB.
-// "deadbody" merges what used to be two separate vehicle options
-// (BODY_MINI / BODY_TEMPO) into one — BODY_MINI is the cheaper one and
-// is used as the single quoted rate.
-export const SERVICE_TYPE_ALIAS = {
-  deadbody: "body_mini",
-};
-
 /**
  * Returns { distFare, base, total } for any ambulance type.
  *
@@ -21,9 +13,8 @@ export const SERVICE_TYPE_ALIAS = {
  * @param {object}   fallbackRates local rates object keyed by typeId
  */
 export function calcFare(typeId, km, pricingList, fallbackRates) {
-  const serviceType = SERVICE_TYPE_ALIAS[typeId] || typeId;
   const doc = pricingList.find(
-    p => p.serviceType?.toLowerCase() === serviceType && p.active !== false
+    p => p.serviceType?.toLowerCase() === typeId && p.active !== false
   );
 
   if (doc?.slabs?.length >= 2) {

@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from "react-native";
 import { COLORS } from "../theme";
-import { calcFare, PRICING_API, SERVICE_TYPE_ALIAS } from "../utils/pricingUtils";
+import { calcFare, PRICING_API } from "../utils/pricingUtils";
 
 // Cosmetic display label only — real fares come live from the pricing API
 // (see src/utils/pricingUtils.js). Covers ids from both the DestinationScreen
@@ -18,7 +18,8 @@ const AMB_LABELS = {
   nicu_tempo: { label: "Newborn Intensive Care Transport • Tempo Traveller" },
   neo:        { label: "Neonatal Transport" },
   card:       { label: "Cardiac Emergency" },
-  deadbody:   { label: "Dignified Transport Service" },
+  body_mini:  { label: "Dead Body Transport • Maruti Eeco" },
+  body_tempo: { label: "Dead Body Transport • Tempo Traveller" },
   mort:       { label: "Mortuary / Remains" },
 };
 
@@ -70,8 +71,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_LABELS);
 
   // AC price: use per-km from API doc if available, else flat fallback
-  const acServiceType = SERVICE_TYPE_ALIAS[selectedType] || selectedType;
-  const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === acServiceType && p.active !== false);
+  const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
   const acPrice = pricingDoc?.acPerKm ? Math.round(pricingDoc.acPerKm * dist) : 200;
 
   const total = baseFareTotal + (acEnabled ? acPrice : 0);

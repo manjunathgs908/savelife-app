@@ -6,7 +6,8 @@ export const AMBULANCE_TYPES = [
   { id: "als_tempo",  icon: "🚐",  name: "ALS Ambulance",           desc: "Advanced Life Support • Tempo Traveller" },
   { id: "acls_tempo", icon: "🚐",  name: "ACLS Ambulance",          desc: "Advanced Cardiac Life Support • Tempo Traveller" },
   { id: "nicu_tempo", icon: "🚐",  name: "NICU Ambulance",          desc: "Newborn Intensive Care Transport • Tempo Traveller" },
-  { id: "deadbody", icon: "⚰️",  name: "Dead Body Transport", desc: "Dignified Transport Service" },
+  { id: "body_mini",  icon: "🚑", name: "Body Shifting Ambulance", desc: "Dead Body Transport • Maruti Eeco" },
+  { id: "body_tempo", icon: "🚐", name: "Body Shifting Ambulance", desc: "Dead Body Transport • Tempo Traveller" },
 ];
 
 // Cosmetic UI metadata only — badge/eta/color have no MongoDB equivalent.
@@ -17,7 +18,8 @@ export const AMB_DISPLAY = {
   als_tempo:  { eta: "12", badge: "ADVANCED",      color: "#3b82f6" },
   acls_tempo: { eta: "12", badge: "CARDIAC",       color: COLORS.red },
   nicu_tempo: { eta: "15", badge: "NEONATAL",      color: "#f59e0b" },
-  deadbody:   { eta: "20", badge: "DIGNIFIED",     color: "#8b5cf6" },
+  body_mini:  { eta: "18", badge: "DIGNIFIED",     color: "#8b5cf6" },
+  body_tempo: { eta: "20", badge: "DIGNIFIED",     color: "#8b5cf6" },
 };
 
 export const AMB_FEATURES = {
