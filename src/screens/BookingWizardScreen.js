@@ -6,6 +6,11 @@ import {
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { COLORS, getBookingConfig } from "../theme";
+import {
+  getRouteInfo,
+  haversineDistanceKm,
+  estimateRouteDurationSeconds,
+} from "../utils/routeUtils";
 
 const MAPS_KEY = "AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY";
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
@@ -218,32 +223,29 @@ export default function BookingWizardScreen({ navigation, route }) {
   // Re-fetch route whenever either endpoint changes
   useEffect(() => {
     if (!pickupCoord || !dropCoord) return;
-    fetchRoute(pickupCoord, dropCoord);
-  }, [pickupCoord, dropCoord]);
+    let active = true;
+    const fallbackDist = haversineDistanceKm(pickupCoord, dropCoord);
+    const fallbackTime = estimateRouteDurationSeconds(fallbackDist);
+    setRealDist(fallbackDist);
+    setRealDuration(fallbackTime);
+    setRouteCoords([pickupCoord, dropCoord]);
 
-  async function fetchRoute(from, to) {
-    try {
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/directions/json` +
-        `?origin=${from.latitude},${from.longitude}` +
-        `&destination=${to.latitude},${to.longitude}` +
-        `&key=${PLACES_KEY}`
-      );
-      const data = await res.json();
-      if (data.routes?.length) {
-        const leg = data.routes[0].legs[0];
-        setRealDist(leg.distance.value / 1000);
-        setRealDuration(leg.duration.value);
-        setRouteCoords(decodePolyline(data.routes[0].overview_polyline.points));
-        setTimeout(() => {
-          mapRef.current?.fitToCoordinates([from, to], {
-            edgePadding: { top: 60, right: 50, bottom: 60, left: 50 },
-            animated: true,
-          });
-        }, 400);
-      }
-    } catch (_) {}
-  }
+    (async () => {
+      const route = await getRouteInfo(pickupCoord, dropCoord);
+      if (!active) return;
+      setRealDist(route.distance);
+      setRealDuration(route.duration);
+      setRouteCoords(route.coords);
+      setTimeout(() => {
+        mapRef.current?.fitToCoordinates([pickupCoord, dropCoord], {
+          edgePadding: { top: 60, right: 50, bottom: 60, left: 50 },
+          animated: true,
+        });
+      }, 400);
+    })();
+
+    return () => { active = false; };
+  }, [pickupCoord, dropCoord]);
 
   // Map tap always sets (or moves) the drop location
   async function handleMapTap(coord) {

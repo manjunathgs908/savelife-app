@@ -9,6 +9,7 @@ import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 import { AMBULANCE_TYPES, AMB_DISPLAY, AMB_FEATURES } from "../utils/ambulanceCatalog";
+import { getRouteInfo, haversineDistanceKm, estimateRouteDurationSeconds } from "../utils/routeUtils";
 import LocationPickerModal, { PICKUP_RECENT_KEY, DEST_RECENT_KEY } from "../components/LocationPickerModal";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
@@ -432,41 +433,20 @@ export default function DestinationScreen({ navigation, route }) {
   useEffect(() => {
     if (!pickupCoord || !destCoord) { setDist(null); setDuration(null); setRouteCoords([]); return; }
 
-    function haversineFallback() {
-      const R = 6371;
-      const dLat = ((destCoord.latitude  - pickupCoord.latitude)  * Math.PI) / 180;
-      const dLng = ((destCoord.longitude - pickupCoord.longitude) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((pickupCoord.latitude * Math.PI) / 180) *
-        Math.cos((destCoord.latitude   * Math.PI) / 180) *
-        Math.sin(dLng / 2) ** 2;
-      const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      setDist(parseFloat(km.toFixed(1)));
-      setDuration(Math.round((km / 30) * 3600));
-      setRouteCoords([pickupCoord, destCoord]); // straight-line fallback
-    }
-
+    const fallbackDist = haversineDistanceKm(pickupCoord, destCoord);
+    setDist(parseFloat(fallbackDist.toFixed(1)));
+    setDuration(estimateRouteDurationSeconds(fallbackDist));
+    setRouteCoords([pickupCoord, destCoord]);
     setRouteLoading(true);
+
     (async () => {
       try {
-        const url =
-          `https://maps.googleapis.com/maps/api/directions/json` +
-          `?origin=${pickupCoord.latitude},${pickupCoord.longitude}` +
-          `&destination=${destCoord.latitude},${destCoord.longitude}` +
-          `&key=${PLACES_KEY}`;
-        const r = await fetch(url);
-        const d = await r.json();
-        if (d.routes?.length) {
-          const leg = d.routes[0].legs[0];
-          setDist(leg.distance.value / 1000);
-          setDuration(leg.duration.value);
-          setRouteCoords(decodePolyline(d.routes[0].overview_polyline.points));
-        } else {
-          haversineFallback();
-        }
+        const route = await getRouteInfo(pickupCoord, destCoord);
+        setDist(route.distance);
+        setDuration(route.duration);
+        setRouteCoords(route.coords);
       } catch {
-        haversineFallback();
+        // Already using fallback values above.
       } finally {
         setRouteLoading(false);
       }

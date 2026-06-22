@@ -7,6 +7,11 @@ import * as Location from "expo-location";
 import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
+import {
+  getRouteInfo,
+  haversineDistanceKm,
+  estimateRouteDurationSeconds,
+} from "../utils/routeUtils";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -612,43 +617,25 @@ export default function DestinationScreen({ navigation, route }) {
   useEffect(() => {
     if (!pickupCoord || !destCoord) { setDist(null); setDuration(null); return; }
 
-    function haversineFallback() {
-      const R = 6371;
-      const dLat = ((destCoord.latitude  - pickupCoord.latitude)  * Math.PI) / 180;
-      const dLng = ((destCoord.longitude - pickupCoord.longitude) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos((pickupCoord.latitude * Math.PI) / 180) *
-        Math.cos((destCoord.latitude   * Math.PI) / 180) *
-        Math.sin(dLng / 2) ** 2;
-      const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      setDist(parseFloat(km.toFixed(1)));
-      setDuration(Math.round((km / 30) * 3600));
-    }
-
+    let active = true;
+    const fallbackDist = haversineDistanceKm(pickupCoord, destCoord);
+    const fallbackTime = estimateRouteDurationSeconds(fallbackDist);
+    setDist(fallbackDist);
+    setDuration(fallbackTime);
     setRouteLoading(true);
-    (async () => {
-      try {
-        const url =
-          `https://maps.googleapis.com/maps/api/directions/json` +
-          `?origin=${pickupCoord.latitude},${pickupCoord.longitude}` +
-          `&destination=${destCoord.latitude},${destCoord.longitude}` +
-          `&key=${PLACES_KEY}`;
-        const r = await fetch(url);
-        const d = await r.json();
-        if (d.routes?.length) {
-          const leg = d.routes[0].legs[0];
-          setDist(leg.distance.value / 1000);
-          setDuration(leg.duration.value);
-        } else {
-          haversineFallback();
-        }
-      } catch {
-        haversineFallback();
-      } finally {
-        setRouteLoading(false);
-      }
-    })();
+
+    getRouteInfo(pickupCoord, destCoord)
+      .then(route => {
+        if (!active) return;
+        setDist(route.distance);
+        setDuration(route.duration);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setRouteLoading(false);
+      });
+
+    return () => { active = false; };
   }, [pickupCoord, destCoord]);
 
   // ── Destination search ─────────────────────────────────────────────────────

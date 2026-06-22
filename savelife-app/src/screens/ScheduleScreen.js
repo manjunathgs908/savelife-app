@@ -6,6 +6,7 @@ import {
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { getRouteInfo, haversineDistanceKm, estimateRouteDurationSeconds } from "../utils/routeUtils";
 import LocationPickerModal, { PICKUP_RECENT_KEY, DEST_RECENT_KEY } from "../components/LocationPickerModal";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
@@ -252,25 +253,19 @@ export default function ScheduleScreen({ navigation }) {
     }
 
     setDistLoading(true);
+    const fallbackDist = haversineDistanceKm(pickupCoord, dropCoord);
+    setDist(parseFloat(fallbackDist.toFixed(1)));
+    setDurationText(`${Math.round(estimateRouteDurationSeconds(fallbackDist) / 60)} min`);
+    setRouteCoords([pickupCoord, dropCoord]);
+
     (async () => {
       try {
-        const url =
-          `https://maps.googleapis.com/maps/api/directions/json` +
-          `?origin=${pickupCoord.latitude},${pickupCoord.longitude}` +
-          `&destination=${dropCoord.latitude},${dropCoord.longitude}` +
-          `&key=${PLACES_KEY}`;
-        const r = await fetch(url);
-        const d = await r.json();
-        if (d.routes?.length) {
-          const leg = d.routes[0].legs[0];
-          setDist(leg.distance.value / 1000);
-          setDurationText(leg.duration.text || `${Math.round(leg.duration.value / 60)} min`);
-          setRouteCoords(decodePolyline(d.routes[0].overview_polyline.points));
-        } else {
-          haversineFallback();
-        }
+        const route = await getRouteInfo(pickupCoord, dropCoord);
+        setDist(route.distance);
+        setDurationText(`${Math.round(route.duration / 60)} min`);
+        setRouteCoords(route.coords);
       } catch {
-        haversineFallback();
+        // Keep fallback values.
       } finally {
         setDistLoading(false);
       }
