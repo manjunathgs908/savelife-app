@@ -752,6 +752,19 @@ export default function DestinationScreen({ navigation, route }) {
 
   // ── Proceed to ambulance type selection — exact contract AmbulanceSelectScreen expects
   function handleFindAmbulance() {
+    if (route?.params?.flow === "remains") {
+      navigation.navigate("DeadBodyTransport", {
+        pickupCoord,
+        pickupLabel,
+        dropCoord: destCoord,
+        dropLabel: destLabel,
+        patientType,
+        contactName,
+        contactPhone,
+      });
+      return;
+    }
+
     navigation.navigate("AmbulanceSelect", {
       pickupLabel,
       dropLabel: destLabel,

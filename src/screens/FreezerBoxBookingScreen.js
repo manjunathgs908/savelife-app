@@ -1,598 +1,598 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  Switch,
-  ActivityIndicator,
-} from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { COLORS } from '../theme';
+  View, Text, TouchableOpacity, ScrollView, TextInput,
+  StyleSheet, Alert, ActivityIndicator, Modal, Animated,
+} from "react-native";
+import { COLORS } from "../theme";
+import storage from "../utils/storage";
 
-// Google Maps API key — sourced from environment variable with a fallback for local dev
-const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDbfZSXgpZqZy3pzyt2Is0b1YWZQduy8dY';
+const PROFILE_DEFAULTS = { name: "", phone: "" };
 
-// ---------------------------------------------------------------------------
-// Data constants
-// ---------------------------------------------------------------------------
+const BOX_NAMES = { normal: "Normal Box", standard: "Standard Box", vip: "VIP / Digital Box" };
 
-const VIP_PINCODES = new Set([
-  '560001','560003','560008','560011','560034','560037','560038','560041',
-  '560048','560054','560055','560066','560069','560070','560080','560094',
-  '560095','560102',
-]);
+// Maps the local box id (set by FreezerBoxScreen's BOX_TYPES) to the boxId
+// string stored in the MongoDB durations/floors collections.
+const BOX_ID_MAP = { normal: "normal_box", standard: "standard_box", vip: "vip_digital_box" };
 
-const SLUM_PINCODES = new Set([
-  '560021','560026','560030','560045','560051','560057','560058',
-]);
+const CITY = "Bengaluru";
 
-// 24-hour base rates per box type and area classification
-const PRICING_MATRIX = {
-  Normal:   { normalArea: 2500, vipArea: 3000 },
-  Standard: { normalArea: 3500, vipArea: 4000 },
-  VIP:      { normalArea: 7000, vipArea: 9000 },
+const DURATIONS_API = "https://api.savelife.health/api/freezer/durations";
+const FLOORS_API     = "https://api.savelife.health/api/freezer/floors";
+
+const TIME_SLOT_LABELS = {
+  morning:   { label: "Morning",   sub: "8 AM to 12 PM" },
+  afternoon: { label: "Afternoon", sub: "12 PM to 4 PM" },
+  evening:   { label: "Evening",   sub: "4 PM to 8 PM" },
+  night:     { label: "Night",     sub: "8 PM to 12 AM" },
 };
 
-const EMBALMING_FEE = 2500;
+function formatScheduledDate(isoString) {
+  if (!isoString) return null;
+  const date = new Date(isoString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((date - today) / 86400000);
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === 2) return "Day After";
+  return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
 
-const BOX_OPTIONS = [
-  { id: 'Normal',   icon: '❄️', name: 'Normal Box',        desc: 'Basic freezer box for standard use' },
-  { id: 'Standard', icon: '🧊', name: 'Standard Box',      desc: 'Enhanced insulation with digital monitoring' },
-  { id: 'VIP',      icon: '💎', name: 'VIP / Digital Box', desc: 'Premium digital freezer with advanced features' },
-];
+function formatDeliveryLine(selectedDeliveryType, scheduledDate, scheduledTimeSlot) {
+  if (selectedDeliveryType === "scheduled") {
+    const dateLabel = formatScheduledDate(scheduledDate);
+    const slot = TIME_SLOT_LABELS[scheduledTimeSlot];
+    if (dateLabel && slot) return `📅 Scheduled: ${dateLabel} (${slot.label} - ${slot.sub})`;
+    return "📅 Scheduled delivery";
+  }
+  return "⚡ Delivery: Express (Today / Now)";
+}
 
-const DURATION_OPTIONS = [
-  { id: '4-12', label: '4 – 12 Hours',      tag: '20% discount',                              multiplier: 1, discountRate: 0.20, showEmbalming: false },
-  { id: '24',   label: '24 Hours (1 Day)',   tag: 'Standard base rate',                        multiplier: 1, discountRate: 0,    showEmbalming: false },
-  { id: '48',   label: '48 Hours (2 Days)',  tag: '30% discount · Embalming option available', multiplier: 2, discountRate: 0.30, showEmbalming: true  },
-  { id: '72',   label: '72 Hours (3 Days)',  tag: '30% discount · Embalming option available', multiplier: 3, discountRate: 0.30, showEmbalming: true  },
-  { id: '96',   label: '96 Hours (4 Days)',  tag: '30% discount · Embalming option available', multiplier: 4, discountRate: 0.30, showEmbalming: true  },
-  { id: '120',  label: '120 Hours (5 Days)', tag: '30% discount · Embalming option available', multiplier: 5, discountRate: 0.30, showEmbalming: true  },
-];
+async function loadUserProfile() {
+  try {
+    const name  = await storage.getItem("user_name");
+    const phone = await storage.getItem("user_phone");
+    return { name: name || PROFILE_DEFAULTS.name, phone: phone || PROFILE_DEFAULTS.phone };
+  } catch {
+    return PROFILE_DEFAULTS;
+  }
+}
 
-const FLOOR_OPTIONS = [
-  { id: 'Ground',   label: 'Ground Floor',   helperCharge: 0    },
-  { id: '1st',      label: '1st Floor',      helperCharge: 600  },
-  { id: '2nd',      label: '2nd Floor',      helperCharge: 1000 },
-  { id: '3rd',      label: '3rd Floor',      helperCharge: 1200 },
-  { id: 'Above3rd', label: 'Above 3rd Floor',helperCharge: 1500 },
-];
+async function fetchDurations(city, boxId) {
+  const res = await fetch(`${DURATIONS_API}?city=${encodeURIComponent(city)}&boxId=${encodeURIComponent(boxId)}`);
+  if (!res.ok) throw new Error(`Durations request failed (${res.status})`);
+  const data = await res.json();
+  return data?.durations || [];
+}
 
-const BANGALORE_CENTER = {
-  latitude: 12.9716,
-  longitude: 77.5946,
-  latitudeDelta: 0.0922,
-  longitudeDelta: 0.0421,
-};
+async function fetchFloors(city, boxId) {
+  const res = await fetch(`${FLOORS_API}?city=${encodeURIComponent(city)}&boxId=${encodeURIComponent(boxId)}`);
+  if (!res.ok) throw new Error(`Floors request failed (${res.status})`);
+  const data = await res.json();
+  return data?.floors || [];
+}
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const BillRow = ({ label, value, green }) => (
+  <View style={styles.billRow}>
+    <Text style={styles.billLabel}>{label}</Text>
+    <Text style={[styles.billValue, green && { color: COLORS.green }]}>{value}</Text>
+  </View>
+);
 
-export default function FreezerBoxBookingScreen({ navigation }) {
-  // Step 1
-  const [boxType, setBoxType] = useState(null);
-  // Step 2
-  const [duration, setDuration] = useState(null);
-  // Step 3 — map & geocoding
-  const [markerCoord, setMarkerCoord] = useState({
-    latitude: BANGALORE_CENTER.latitude,
-    longitude: BANGALORE_CENTER.longitude,
-  });
-  const [geocoding, setGeocoding] = useState(false);
-  const [locationConfirmed, setLocationConfirmed] = useState(false);
-  const [isVipArea, setIsVipArea] = useState(false);
-  const [resolvedAddress, setResolvedAddress] = useState('');
-  // Step 4 — embalming toggle (only for multi-day durations)
-  const [includeEmbalming, setIncludeEmbalming] = useState(true);
-  // Step 4 — floor
-  const [selectedFloor, setSelectedFloor] = useState('Ground');
-  // Step 5 — customer details
-  const [customerName, setCustomerName] = useState('');
-  const [phone, setPhone] = useState('');
+export default function FreezerBoxBookingScreen({ navigation, route }) {
+  const {
+    selectedBox, markerCoord, confirmedAddress, resolvedCity,
+    selectedDeliveryType = "express", scheduledDate = null, scheduledTimeSlot = null,
+  } = route.params || {};
+
+  // Captured directly from route.params on every navigation into this screen —
+  // falls back to the local BOX_TYPES id only if the caller didn't pass one.
+  const [selectedBoxId, setSelectedBoxId] = useState(
+    route.params?.selectedBoxId || BOX_ID_MAP[selectedBox?.id] || selectedBox?.id || null
+  );
+
+  useEffect(() => {
+    setSelectedBoxId(route.params?.selectedBoxId || BOX_ID_MAP[selectedBox?.id] || selectedBox?.id || null);
+  }, [route.params?.selectedBoxId, selectedBox?.id]);
+
+  const [durations, setDurations] = useState([]);
+  const [durationsLoading, setDurationsLoading] = useState(true);
+  const [durationsError, setDurationsError] = useState(null);
+
+  const [floors, setFloors] = useState([]);
+  const [floorsLoading, setFloorsLoading] = useState(true);
+  const [floorsError, setFloorsError] = useState(null);
+
+  const [durationId, setDurationId] = useState(null);
+  const [floorId, setFloorId] = useState(null);
+  const [customerName, setCustomerName] = useState("");
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [bookingPhase, setBookingPhase] = useState("searching");
 
-  const mapRef = useRef(null);
+  const pulseAnim    = useRef(new Animated.Value(1)).current;
+  const iconMoveAnim = useRef(new Animated.Value(0)).current;
+  const dotPulseAnim = useRef(new Animated.Value(1)).current;
 
-  // ---------------------------------------------------------------------------
-  // Google Maps reverse geocoding
-  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    loadUserProfile().then(p => { setCustomerName(p.name); setPhone(p.phone); });
+  }, []);
 
-  async function reverseGeocode(latitude, longitude) {
-    const url =
-      `https://maps.googleapis.com/maps/api/geocode/json` +
-      `?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_KEY}`;
+  // Single combined fetch — both the durations and the floor-rule documents
+  // for the active selectedBoxId are pulled from MongoDB together, in one
+  // page lifecycle, so the two lists are always for the same box.
+  function loadBoxData() {
+    if (!selectedBoxId) return;
+    setDurationsLoading(true);
+    setFloorsLoading(true);
+    setDurationsError(null);
+    setFloorsError(null);
+    Promise.all([fetchDurations(CITY, selectedBoxId), fetchFloors(CITY, selectedBoxId)])
+      .then(([durs, fls]) => {
+        setDurations(durs);
+        setFloors(fls);
+      })
+      .catch(() => {
+        setDurationsError("Could not load durations. Pull down to retry.");
+        setFloorsError("Could not load floor options. Pull down to retry.");
+      })
+      .finally(() => {
+        setDurationsLoading(false);
+        setFloorsLoading(false);
+      });
+  }
 
-    const response = await fetch(url);
-    const data = await response.json();
+  useEffect(() => {
+    loadBoxData();
+  }, [selectedBoxId]);
 
-    if (!data.results || data.results.length === 0) {
-      return { address: null, pincode: null };
-    }
-
-    const firstResult = data.results[0];
-    const formattedAddress = firstResult.formatted_address;
-
-    const pincodeComponent = firstResult.address_components.find(component =>
-      component.types.includes('postal_code')
+  useEffect(() => {
+    if (!showOverlay || bookingPhase !== "searching") return;
+    pulseAnim.setValue(1);
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.35, duration: 650, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 650, useNativeDriver: true }),
+      ])
     );
-    const pincode = pincodeComponent ? pincodeComponent.long_name : null;
+    anim.start();
+    return () => anim.stop();
+  }, [showOverlay, bookingPhase]);
 
-    return { address: formattedAddress, pincode };
+  useEffect(() => {
+    if (!showOverlay || bookingPhase !== "confirmed") return;
+    iconMoveAnim.setValue(0);
+    dotPulseAnim.setValue(1);
+    const move = Animated.loop(
+      Animated.sequence([
+        Animated.timing(iconMoveAnim, { toValue: 14,  duration: 500, useNativeDriver: true }),
+        Animated.timing(iconMoveAnim, { toValue: -14, duration: 500, useNativeDriver: true }),
+        Animated.timing(iconMoveAnim, { toValue: 0,   duration: 400, useNativeDriver: true }),
+      ])
+    );
+    const dot = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotPulseAnim, { toValue: 0.25, duration: 550, useNativeDriver: true }),
+        Animated.timing(dotPulseAnim, { toValue: 1,    duration: 550, useNativeDriver: true }),
+      ])
+    );
+    move.start();
+    dot.start();
+    return () => { move.stop(); dot.stop(); };
+  }, [showOverlay, bookingPhase]);
+
+  const selectedDuration = durations.find(d => d.durationId === durationId) || null;
+  const selectedFloor    = floors.find(f => f.floorId === floorId) || null;
+
+  // Pricing is derived live from whichever duration + floor documents are
+  // currently selected — no flat total or fixed discount is ever applied.
+  // Embalming is bundled into the package at no extra client cost, so it
+  // never adds to the live total — it's only ever shown as "Included".
+  const bill = useMemo(() => {
+    if (!selectedDuration || !selectedFloor) return null;
+    const basePrice = selectedDuration.basePrice;
+    const discountPercentage = selectedDuration.discountPercentage || 0;
+    const discountAmt = Math.round(basePrice * (discountPercentage / 100));
+    const finalPrice = basePrice - discountAmt;
+    const embalmingIncluded = selectedDuration.embalmingIncluded === true;
+    const helperCharge = selectedFloor.charge || 0;
+    const total = (basePrice - discountAmt) + helperCharge;
+    return { basePrice, discountPercentage, discountAmt, finalPrice, embalmingIncluded, helperCharge, total };
+  }, [selectedDuration, selectedFloor]);
+
+  const isPhoneValid = /^\d{10}$/.test(phone);
+  const canSubmit = !!selectedDuration && !!selectedFloor && customerName.trim().length > 0 && isPhoneValid;
+
+  function handleBack() {
+    navigation.goBack();
   }
-
-  async function handleConfirmLocation() {
-    setGeocoding(true);
-    try {
-      const { address, pincode } = await reverseGeocode(
-        markerCoord.latitude,
-        markerCoord.longitude
-      );
-
-      if (!address) {
-        Alert.alert(
-          'Location Not Found',
-          'Could not resolve an address for the selected pin. Try adjusting the marker position.'
-        );
-        return;
-      }
-
-      setResolvedAddress(address);
-
-      // Classify area: VIP pincodes get premium rates; slum and unknown pincodes get normal rates
-      const vip = pincode ? VIP_PINCODES.has(pincode) : false;
-      setIsVipArea(vip);
-      setLocationConfirmed(true);
-    } catch (error) {
-      console.error('Reverse geocoding failed:', error);
-      Alert.alert('Network Error', 'Unable to fetch address. Check your connection and try again.');
-    } finally {
-      setGeocoding(false);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Dynamic price calculation
-  // ---------------------------------------------------------------------------
-
-  function calculateBill() {
-    if (!boxType || !duration || !locationConfirmed) return null;
-
-    const selectedDuration = DURATION_OPTIONS.find(d => d.id === duration);
-    const baseRate = isVipArea
-      ? PRICING_MATRIX[boxType].vipArea
-      : PRICING_MATRIX[boxType].normalArea;
-
-    const grossRent = baseRate * selectedDuration.multiplier;
-    const discountAmount = Math.round(grossRent * selectedDuration.discountRate);
-    const netRent = grossRent - discountAmount;
-
-    const embalmingCharge =
-      selectedDuration.showEmbalming && includeEmbalming ? EMBALMING_FEE : 0;
-
-    const floorObj = FLOOR_OPTIONS.find(f => f.id === selectedFloor);
-    const helperCharge = floorObj ? floorObj.helperCharge : 0;
-
-    const total = netRent + embalmingCharge + helperCharge;
-
-    return {
-      grossRent,
-      discountRate: selectedDuration.discountRate * 100,
-      discountAmount,
-      netRent,
-      embalmingCharge,
-      helperCharge,
-      total,
-    };
-  }
-
-  const bill = calculateBill();
-  const selectedDurationObj = DURATION_OPTIONS.find(d => d.id === duration);
-
-  // ---------------------------------------------------------------------------
-  // Submission
-  // ---------------------------------------------------------------------------
 
   async function handleSubmit() {
-    if (!customerName.trim()) {
-      return Alert.alert('Missing', 'Please enter the customer name.');
+    if (!canSubmit) {
+      if (!isPhoneValid) Alert.alert("Invalid Number", "Please enter a valid 10-digit mobile number.");
+      else if (!customerName.trim()) Alert.alert("Missing Name", "Please enter the customer name.");
+      else Alert.alert("Incomplete", "Please select duration and floor.");
+      return;
     }
-    if (!phone.trim() || phone.length < 10) {
-      return Alert.alert('Missing', 'Please enter a valid 10-digit phone number.');
-    }
+
+    // Final order payload — carries the exact delivery window so the
+    // backend can log whether this was an Express or Scheduled request.
+    const orderPayload = {
+      boxId: selectedBoxId,
+      durationId: selectedDuration.durationId,
+      floorId: selectedFloor.floorId,
+      markerCoord,
+      confirmedAddress,
+      resolvedCity,
+      customerName: customerName.trim(),
+      phone,
+      bill,
+      selectedDeliveryType,
+      scheduledDate,
+      scheduledTimeSlot,
+    };
+    console.log("Freezer box order payload:", orderPayload);
 
     setSubmitting(true);
-    try {
-      Alert.alert(
-        'Request Submitted!',
-        `Your freezer box booking is received.\nTotal: ₹${bill?.total?.toLocaleString()}`,
-        [{ text: 'OK', onPress: () => navigation?.goBack() }]
-      );
-    } catch (error) {
-      console.error('Submission failed:', error);
-      Alert.alert('Error', 'Submission failed. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+    setBookingPhase("searching");
+    setShowOverlay(true);
+    setSubmitting(false);
+    setTimeout(() => setBookingPhase("confirmed"), 3000);
   }
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  function handleCancelBooking() {
+    setShowOverlay(false);
+    setBookingPhase("searching");
+    navigation.popToTop ? navigation.popToTop() : navigation.goBack();
+  }
+
+  if (!selectedBox || !selectedBoxId) {
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
+        <Text style={{ color: COLORS.grayDim }}>Missing booking details. Please go back and try again.</Text>
+        <TouchableOpacity style={[styles.btn, { marginTop: 18 }]} onPress={handleBack}>
+          <Text style={styles.btnText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.container}>
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation?.goBack()}>
-          <Text style={styles.backArrow}>&#8592;</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Freezer Box</Text>
-          <Text style={styles.headerSubtitle}>Home freezer box service</Text>
+        <View>
+          <Text style={styles.title}>Booking Details</Text>
+          <Text style={styles.stepLbl}>Freezer Box · Checkout</Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Banner */}
-        <View style={styles.bannerCard}>
-          <Text style={styles.bannerText}>
-            Professional freezer box service delivered to your doorstep
-          </Text>
-          <View style={styles.availabilityRow}>
-            <View style={styles.availabilityDot} />
-            <Text style={styles.availabilityText}>Available 24x7</Text>
-          </View>
-        </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 18 }} showsVerticalScrollIndicator={false}>
 
-        {/* ── STEP 1: Box Type ─────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <View style={styles.stepRow}>
-            <View style={styles.stepBadge}><Text style={styles.stepNumber}>1</Text></View>
-            <Text style={styles.cardTitle}>Select Box Type</Text>
-          </View>
-          {BOX_OPTIONS.map(box => (
-            <TouchableOpacity
-              key={box.id}
-              style={[styles.optionRow, boxType === box.id && styles.optionRowActive]}
-              onPress={() => setBoxType(box.id)}
-            >
-              <Text style={styles.optionIcon}>{box.icon}</Text>
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionName}>{box.name}</Text>
-                <Text style={styles.optionDesc}>{box.desc}</Text>
-              </View>
-              <View style={[styles.radioOuter, boxType === box.id && styles.radioOuterActive]}>
-                {boxType === box.id && <View style={styles.radioDot} />}
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* ── STEP 2: Duration — unlocked after box type selected ───────── */}
-        {boxType && (
-          <View style={styles.card}>
-            <View style={styles.stepRow}>
-              <View style={styles.stepBadge}><Text style={styles.stepNumber}>2</Text></View>
-              <Text style={styles.cardTitle}>Select Duration</Text>
+        {/* Summary card */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <Text style={{ fontSize: 28 }}>{selectedBox.icon}</Text>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.summaryName}>{selectedBox.name || BOX_NAMES[selectedBox.id]}</Text>
+              {resolvedCity && (
+                <Text style={styles.summaryRate}>{resolvedCity}</Text>
+              )}
+              <Text style={styles.summaryDelivery}>
+                {formatDeliveryLine(selectedDeliveryType, scheduledDate, scheduledTimeSlot)}
+              </Text>
             </View>
-            {DURATION_OPTIONS.map(dur => (
-              <TouchableOpacity
-                key={dur.id}
-                style={[styles.listRow, duration === dur.id && styles.listRowActive]}
-                onPress={() => setDuration(dur.id)}
-              >
-                <View style={styles.listRowContent}>
-                  <Text style={styles.listRowTitle}>{dur.label}</Text>
-                  <Text style={styles.discountLabel}>{dur.tag}</Text>
-                </View>
-                <View style={[styles.radioOuter, duration === dur.id && styles.radioOuterActive]}>
-                  {duration === dur.id && <View style={styles.radioDot} />}
-                </View>
-              </TouchableOpacity>
-            ))}
+          </View>
+          {confirmedAddress ? (
+            <View style={styles.summaryAddrRow}>
+              <Text style={styles.summaryAddrIcon}>📍</Text>
+              <Text style={styles.summaryAddrText} numberOfLines={2}>{confirmedAddress}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Duration — fetched live from the durations collection */}
+        <Text style={styles.q}>Select Duration</Text>
+        <Text style={styles.qHint}>Longer durations include embalming service</Text>
+
+        {durationsLoading && <ActivityIndicator color={COLORS.red} style={{ marginVertical: 10 }} />}
+
+        {durationsError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorBoxText}>{durationsError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={loadBoxData}>
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* ── STEP 3: Map location — unlocked after duration selected ─────── */}
-        {duration && (
-          <View style={styles.card}>
-            <View style={styles.stepRow}>
-              <View style={styles.stepBadge}><Text style={styles.stepNumber}>3</Text></View>
-              <Text style={styles.cardTitle}>Service Location</Text>
-            </View>
-            <Text style={styles.fieldHint}>
-              Drag the map or move the pin to your delivery address, then tap Confirm.
-            </Text>
+        {!durationsLoading && !durationsError && durations.length === 0 && (
+          <Text style={styles.qHint}>No durations available for this box right now.</Text>
+        )}
 
-            <View style={styles.mapContainer}>
-              <MapView
-                ref={mapRef}
-                style={styles.map}
-                provider={PROVIDER_GOOGLE}
-                initialRegion={BANGALORE_CENTER}
-                onRegionChangeComplete={region =>
-                  setMarkerCoord({ latitude: region.latitude, longitude: region.longitude })
-                }
-              >
-                <Marker
-                  coordinate={markerCoord}
-                  draggable
-                  pinColor="#EF4444"
-                  onDragEnd={e => setMarkerCoord(e.nativeEvent.coordinate)}
-                />
-              </MapView>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.confirmBtn, geocoding && styles.disabledBtn]}
-              onPress={handleConfirmLocation}
-              disabled={geocoding}
+        {durations.map(dur => {
+          const discountAmt = Math.round(dur.basePrice * ((dur.discountPercentage || 0) / 100));
+          const finalPrice = dur.basePrice - discountAmt;
+          return (
+            <TouchableOpacity key={dur.durationId}
+              style={[styles.opt, durationId === dur.durationId && styles.optActive]}
+              onPress={() => setDurationId(dur.durationId)}
             >
-              {geocoding
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.confirmBtnText}>
-                    {locationConfirmed ? 'Re-confirm Location' : 'Confirm Location'}
-                  </Text>
-              }
-            </TouchableOpacity>
-
-            {locationConfirmed && (
-              <View style={[styles.areaBadge, isVipArea ? styles.areaBadgeVip : styles.areaBadgeNormal]}>
-                <Text style={styles.areaBadgeTitle}>
-                  {isVipArea ? '💎 VIP Area — Premium rates apply' : '✓ Normal Area — Standard rates apply'}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.optName}>{dur.label}</Text>
+                <Text style={styles.optDesc}>
+                  ₹{finalPrice.toLocaleString()}
+                  {dur.discountPercentage > 0 ? `  ·  ${dur.discountPercentage}% off` : ""}
+                  {dur.embalmingIncluded === true ? `  ·  Embalming Included` : ""}
                 </Text>
-                <Text style={styles.areaBadgeAddress} numberOfLines={2}>{resolvedAddress}</Text>
               </View>
-            )}
+              <View style={[styles.radio, durationId === dur.durationId && styles.radioActive]}>
+                {durationId === dur.durationId && <View style={styles.radioDot} />}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Floor selector — fetched live from the floors collection; VIP boxes
+            naturally only ever get the single "ground" document back */}
+        <Text style={[styles.q, { marginTop: 8 }]}>Floor Selection</Text>
+        <Text style={styles.qHint}>Helper charges vary by floor level</Text>
+
+        {floorsLoading && <ActivityIndicator color={COLORS.red} style={{ marginVertical: 10 }} />}
+
+        {floorsError && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorBoxText}>{floorsError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={loadBoxData}>
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* ── STEPS 4 & 5 — unlocked after location is confirmed ─────────── */}
-        {locationConfirmed && (
-          <>
-            {/* Embalming toggle — only for multi-day durations */}
-            {selectedDurationObj?.showEmbalming && (
-              <View style={styles.card}>
-                <View style={styles.embalmingRow}>
-                  <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={styles.cardTitle}>Embalming Service</Text>
-                    <Text style={styles.fieldHint}>
-                      Recommended preservation for multi-day rentals — ₹2,500 flat fee
-                    </Text>
-                  </View>
-                  <Switch
-                    trackColor={{ false: 'rgba(0,0,0,0.1)', true: COLORS.red }}
-                    thumbColor={COLORS.white}
-                    value={includeEmbalming}
-                    onValueChange={setIncludeEmbalming}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* STEP 4: Floor selection */}
-            <View style={styles.card}>
-              <View style={styles.stepRow}>
-                <View style={styles.stepBadge}><Text style={styles.stepNumber}>4</Text></View>
-                <Text style={styles.cardTitle}>Floor Selection</Text>
-              </View>
-              <Text style={styles.fieldHint}>Helper shifting charges vary by floor level</Text>
-              {FLOOR_OPTIONS.map(f => (
-                <TouchableOpacity
-                  key={f.id}
-                  style={[styles.listRow, selectedFloor === f.id && styles.listRowActive]}
-                  onPress={() => setSelectedFloor(f.id)}
-                >
-                  <Text style={styles.listRowTitle}>{f.label}</Text>
-                  <View style={styles.floorRight}>
-                    <Text style={f.helperCharge === 0 ? styles.freeLabel : styles.chargeLabel}>
-                      {f.helperCharge === 0 ? 'Free' : `₹${f.helperCharge.toLocaleString()}`}
-                    </Text>
-                    <View style={[styles.radioOuter, selectedFloor === f.id && styles.radioOuterActive]}>
-                      {selectedFloor === f.id && <View style={styles.radioDot} />}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* STEP 5: Customer details */}
-            <View style={styles.card}>
-              <View style={styles.stepRow}>
-                <View style={styles.stepBadge}><Text style={styles.stepNumber}>5</Text></View>
-                <Text style={styles.cardTitle}>Delivery Details</Text>
-              </View>
-
-              <Text style={styles.fieldLabel}>RESOLVED ADDRESS</Text>
-              <TextInput
-                style={[styles.input, { color: '#666' }]}
-                value={resolvedAddress}
-                editable={false}
-              />
-
-              <Text style={styles.fieldLabel}>CUSTOMER NAME</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter full name"
-                placeholderTextColor="#555"
-                value={customerName}
-                onChangeText={setCustomerName}
-              />
-
-              <Text style={styles.fieldLabel}>PHONE NUMBER</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+91 Enter 10-digit phone number"
-                placeholderTextColor="#555"
-                keyboardType="phone-pad"
-                maxLength={10}
-                value={phone}
-                onChangeText={setPhone}
-              />
-            </View>
-
-            {/* Live bill breakdown — updates instantly as selections change */}
-            {bill && (
-              <View style={styles.billCard}>
-                <Text style={styles.billTitle}>Live Bill Breakdown</Text>
-
-                <View style={styles.billLine}>
-                  <Text style={styles.billLabel}>Freezer Box Rent ({boxType})</Text>
-                  <Text style={styles.billValue}>₹{bill.grossRent.toLocaleString()}</Text>
-                </View>
-
-                {bill.discountAmount > 0 && (
-                  <View style={styles.billLine}>
-                    <Text style={styles.billLabelGreen}>
-                      Duration Discount ({bill.discountRate}%)
-                    </Text>
-                    <Text style={styles.billValueGreen}>
-                      – ₹{bill.discountAmount.toLocaleString()}
-                    </Text>
-                  </View>
-                )}
-
-                {bill.embalmingCharge > 0 && (
-                  <View style={styles.billLine}>
-                    <Text style={styles.billLabel}>Embalming Charge</Text>
-                    <Text style={styles.billValue}>₹{bill.embalmingCharge.toLocaleString()}</Text>
-                  </View>
-                )}
-
-                {bill.helperCharge > 0 && (
-                  <View style={styles.billLine}>
-                    <Text style={styles.billLabel}>Helper Charge ({selectedFloor} floor)</Text>
-                    <Text style={styles.billValue}>₹{bill.helperCharge.toLocaleString()}</Text>
-                  </View>
-                )}
-
-                <View style={styles.billDivider} />
-
-                <View style={styles.billLine}>
-                  <Text style={styles.billTotalLabel}>TOTAL</Text>
-                  <Text style={styles.billTotal}>₹{bill.total.toLocaleString()}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Submit */}
-            <TouchableOpacity
-              style={[styles.submitButton, submitting && styles.disabledBtn]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitText}>Request Freezer Box</Text>
-              }
-            </TouchableOpacity>
-            <Text style={styles.submitNote}>Our team will call you to confirm the booking</Text>
-          </>
+        {!floorsLoading && !floorsError && floors.length === 0 && (
+          <Text style={styles.qHint}>No floor options available for this box right now.</Text>
         )}
+
+        {floors.map(fl => (
+          <TouchableOpacity key={fl.floorId}
+            style={[styles.opt, floorId === fl.floorId && styles.optActive]}
+            onPress={() => setFloorId(fl.floorId)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optName}>{fl.label}</Text>
+            </View>
+            <Text style={fl.isFree ? styles.freeTag : styles.chargeTag}>
+              {fl.isFree ? "Free" : `₹${fl.charge.toLocaleString()}`}
+            </Text>
+            <View style={[styles.radio, floorId === fl.floorId && styles.radioActive]}>
+              {floorId === fl.floorId && <View style={styles.radioDot} />}
+            </View>
+          </TouchableOpacity>
+        ))}
+
+        {/* Contact details */}
+        <Text style={[styles.q, { marginTop: 8 }]}>Contact Details</Text>
+        <Text style={styles.fieldLabel}>CUSTOMER NAME</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter full name"
+          placeholderTextColor={COLORS.grayDim}
+          value={customerName}
+          onChangeText={setCustomerName}
+        />
+        <Text style={styles.fieldLabel}>MOBILE NUMBER</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="10-digit mobile number"
+          placeholderTextColor={COLORS.grayDim}
+          keyboardType="phone-pad"
+          maxLength={10}
+          value={phone}
+          onChangeText={t => setPhone(t.replace(/[^0-9]/g, ""))}
+        />
+        {phone.length > 0 && !isPhoneValid && (
+          <Text style={styles.errorText}>Enter a valid 10-digit mobile number</Text>
+        )}
+
+        {/* Bill breakdown — summed entirely from the fetched duration + floor docs */}
+        {bill && (
+          <View style={styles.billCard}>
+            <Text style={styles.billTitle}>Bill Breakdown</Text>
+            <BillRow label="Base Rent" value={`₹${bill.basePrice.toLocaleString()}`} />
+            {bill.discountAmt > 0 && (
+              <BillRow label={`Discount (${bill.discountPercentage}%)`} value={`– ₹${bill.discountAmt.toLocaleString()}`} green />
+            )}
+            {bill.embalmingIncluded && (
+              <BillRow label="Embalming Charge" value="Included" green />
+            )}
+            {bill.helperCharge > 0 && (
+              <BillRow label="Helper Charge" value={`₹${bill.helperCharge.toLocaleString()}`} />
+            )}
+            <View style={styles.billDivider} />
+            <View style={styles.billTotalRow}>
+              <Text style={styles.billTotalLabel}>TOTAL</Text>
+              <Text style={styles.billTotal}>₹{bill.total.toLocaleString()}</Text>
+            </View>
+          </View>
+        )}
+
       </ScrollView>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.btn, (!canSubmit || submitting) && { opacity: 0.4 }]}
+          disabled={!canSubmit || submitting}
+          onPress={handleSubmit}
+        >
+          {submitting
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={styles.btnText}>
+                {bill ? `Confirm Booking  ·  ₹${bill.total.toLocaleString()}` : "Confirm Booking"}
+              </Text>}
+        </TouchableOpacity>
+      </View>
+
+      {/* Booking overlay */}
+      <Modal visible={showOverlay} animationType="fade" statusBarTranslucent transparent>
+        <View style={styles.ovBg}>
+
+          {bookingPhase === "searching" ? (
+            <View style={styles.ovSearching}>
+              <Animated.Text style={[styles.ovEmoji, { transform: [{ scale: pulseAnim }] }]}>❄️</Animated.Text>
+              <Text style={styles.ovSearchTitle}>Finding nearest freezer box team</Text>
+              <Text style={styles.ovSearchSub}>Our team is being assigned  •  Please wait</Text>
+              {confirmedAddress ? (
+                <View style={styles.ovAddrRow}>
+                  <Text style={styles.ovAddrIcon}>📍</Text>
+                  <Text style={styles.ovAddrText} numberOfLines={2}>{confirmedAddress}</Text>
+                </View>
+              ) : null}
+              <ActivityIndicator color={COLORS.red} size="small" style={{ marginTop: 28 }} />
+            </View>
+          ) : (
+            <View style={styles.ovConfirmed}>
+              <View style={styles.ovLiveBadge}>
+                <View style={styles.ovLiveDot} />
+                <Text style={styles.ovLiveText}>LIVE</Text>
+              </View>
+
+              <Animated.Text style={[styles.ovEmoji, { transform: [{ translateX: iconMoveAnim }], marginTop: 32 }]}>❄️</Animated.Text>
+
+              <View style={styles.ovEtaRow}>
+                <View style={styles.ovEtaBox}>
+                  <Text style={styles.ovEtaNum}>5</Text>
+                  <Text style={styles.ovEtaUnit}>min</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 16 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Animated.View style={[styles.ovBlueDot, { opacity: dotPulseAnim }]} />
+                    <Text style={styles.ovEtaStatus}>Team on the way</Text>
+                  </View>
+                  <Text style={styles.ovEtaSub}>Ravi Kumar is heading to your location</Text>
+                </View>
+              </View>
+
+              <View style={styles.ovTeamCard}>
+                <View style={styles.ovTeamAvatar}><Text style={{ fontSize: 24 }}>👤</Text></View>
+                <View style={{ flex: 1, marginLeft: 14 }}>
+                  <Text style={styles.ovTeamName}>Ravi Kumar</Text>
+                  <Text style={styles.ovTeamInfo}>Freezer Box  •  KA-01-AB-1234</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                    <Text style={styles.ovTeamStar}>★</Text>
+                    <Text style={styles.ovTeamRating}>4.9</Text>
+                  </View>
+                </View>
+                <View style={styles.ovTeamBtns}>
+                  <TouchableOpacity style={styles.ovCallBtn} activeOpacity={0.8}>
+                    <Text style={{ fontSize: 18 }}>📞</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.ovMsgBtn} activeOpacity={0.8}>
+                    <Text style={{ fontSize: 18 }}>💬</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.ovCancelBtn} onPress={handleCancelBooking} activeOpacity={0.8}>
+                <Text style={styles.ovCancelText}>Cancel Booking</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+        </View>
+      </Modal>
+
     </View>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.bg },
+  container: { flex: 1, backgroundColor: COLORS.bg, paddingTop: 50 },
 
-  // Header
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingTop: 50, paddingBottom: 14, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.07)' },
-  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' },
-  backArrow: { color: COLORS.text, fontSize: 20 },
-  headerTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-  headerSubtitle: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18 },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.06)", alignItems: "center", justifyContent: "center" },
+  title: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
+  stepLbl: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
 
-  // Scroll
-  scrollContent: { padding: 16, paddingBottom: 50 },
+  summaryCard: { backgroundColor: "rgba(232,25,44,0.06)", borderWidth: 1, borderColor: "rgba(232,25,44,0.25)", borderRadius: 16, padding: 16, marginBottom: 20 },
+  summaryRow: { flexDirection: "row", alignItems: "center" },
+  summaryName: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
+  summaryRate: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
+  summaryDelivery: { color: COLORS.red, fontSize: 12, fontWeight: "700", marginTop: 5 },
+  summaryAddrRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", marginTop: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: "rgba(0,0,0,0.08)" },
+  summaryAddrIcon: { fontSize: 13 },
+  summaryAddrText: { color: COLORS.gray, fontSize: 12, flex: 1, lineHeight: 18 },
 
-  // Banner
-  bannerCard: { backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.25)', borderRadius: 14, padding: 14, marginBottom: 16 },
-  bannerText: { color: COLORS.gray, fontSize: 13, lineHeight: 18 },
-  availabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  availabilityDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.red },
-  availabilityText: { fontSize: 11, color: COLORS.red, fontWeight: '600' },
+  q: { color: COLORS.text, fontSize: 17, fontWeight: "700", marginBottom: 6 },
+  qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 14 },
 
-  // Card / section
-  card: { backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 16, padding: 16, marginBottom: 14 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  stepBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.red, alignItems: 'center', justifyContent: 'center' },
-  stepNumber: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
-  cardTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },
+  optActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
+  optName: { color: COLORS.text, fontWeight: "600", fontSize: 15 },
+  optDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+  freeTag: { color: COLORS.green, fontSize: 12, fontWeight: "700", marginRight: 8 },
+  chargeTag: { color: COLORS.grayDim, fontSize: 12, fontWeight: "600", marginRight: 8 },
 
-  // Box type option rows
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 12, marginBottom: 10 },
-  optionRowActive: { borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.08)' },
-  optionIcon: { fontSize: 26 },
-  optionInfo: { flex: 1 },
-  optionName: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
-  optionDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  errorBox: { backgroundColor: "rgba(232,25,44,0.06)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 12, padding: 14, marginBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  errorBoxText: { color: COLORS.red, fontSize: 12, flex: 1 },
+  retryBtn: { backgroundColor: COLORS.red, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  retryBtnText: { color: COLORS.white, fontSize: 12, fontWeight: "700" },
 
-  // Generic list rows (duration, floor)
-  listRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', borderRadius: 10, marginBottom: 8 },
-  listRowActive: { borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.08)' },
-  listRowContent: { flex: 1 },
-  listRowTitle: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
-  discountLabel: { color: COLORS.green, fontSize: 11, marginTop: 3 },
-
-  // Radio button
-  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.grayDim, alignItems: 'center', justifyContent: 'center' },
-  radioOuterActive: { borderColor: COLORS.red },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.red },
-
-  // Map
-  mapContainer: { height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: 12, borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.1)' },
-  map: { flex: 1 },
-
-  // Confirm location button
-  confirmBtn: { backgroundColor: COLORS.red, padding: 13, borderRadius: 10, alignItems: 'center', marginBottom: 10 },
-  confirmBtnText: { color: COLORS.white, fontSize: 14, fontWeight: '700' },
-  disabledBtn: { opacity: 0.6 },
-
-  // Area badge (shown after geocoding)
-  areaBadge: { borderRadius: 10, padding: 12, marginTop: 4 },
-  areaBadgeVip: { backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.4)' },
-  areaBadgeNormal: { backgroundColor: 'rgba(34,197,94,0.1)', borderWidth: 0.5, borderColor: 'rgba(34,197,94,0.3)' },
-  areaBadgeTitle: { color: COLORS.text, fontSize: 13, fontWeight: '700' },
-  areaBadgeAddress: { color: COLORS.grayDim, fontSize: 12, marginTop: 4 },
-
-  // Embalming
-  embalmingRow: { flexDirection: 'row', alignItems: 'center' },
-
-  // Floor
-  floorRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  freeLabel: { color: COLORS.green, fontSize: 12, fontWeight: '700' },
-  chargeLabel: { color: COLORS.grayDim, fontSize: 12, fontWeight: '600' },
-
-  // Inputs
-  fieldHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 12, marginTop: -4 },
   fieldLabel: { color: COLORS.grayDim, fontSize: 11, letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
-  input: { backgroundColor: 'rgba(0,0,0,0.05)', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 10, padding: 12, color: COLORS.text, fontSize: 14, marginBottom: 14 },
+  input: { backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 0.5, borderColor: "rgba(0,0,0,0.1)", borderRadius: 10, padding: 12, color: COLORS.text, fontSize: 14, marginBottom: 10 },
+  errorText: { color: COLORS.red, fontSize: 11, marginTop: -4, marginBottom: 10 },
 
-  // Bill card
-  billCard: { backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 0.5, borderColor: 'rgba(239,68,68,0.3)', borderRadius: 16, padding: 16, marginBottom: 16 },
-  billTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700', marginBottom: 14 },
-  billLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  billCard: { backgroundColor: "rgba(0,0,0,0.03)", borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)", borderRadius: 16, padding: 18, marginTop: 8, marginBottom: 8 },
+  billTitle: { color: COLORS.text, fontSize: 15, fontWeight: "700", marginBottom: 14 },
+  billRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   billLabel: { color: COLORS.grayDim, fontSize: 13 },
-  billValue: { color: COLORS.text, fontSize: 13, fontWeight: '600' },
-  billLabelGreen: { color: COLORS.green, fontSize: 13 },
-  billValueGreen: { color: COLORS.green, fontSize: 13, fontWeight: '600' },
-  billDivider: { height: 0.5, backgroundColor: 'rgba(0,0,0,0.1)', marginVertical: 10 },
-  billTotalLabel: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
-  billTotal: { color: COLORS.red, fontSize: 22, fontWeight: '800' },
+  billValue: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
+  billDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.1)", marginVertical: 10 },
+  billTotalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  billTotalLabel: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
+  billTotal: { color: COLORS.red, fontSize: 24, fontWeight: "800" },
 
-  // Submit
-  submitButton: { backgroundColor: COLORS.red, borderRadius: 14, padding: 17, alignItems: 'center', marginBottom: 10 },
-  submitText: { color: COLORS.white, fontSize: 15, fontWeight: '700' },
-  submitNote: { textAlign: 'center', color: COLORS.grayDim, fontSize: 11, marginBottom: 10 },
+  footer: { padding: 18 },
+  btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
+  btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
+
+  ovBg: { flex: 1, backgroundColor: "rgba(5,6,8,0.97)", justifyContent: "center", alignItems: "center", paddingHorizontal: 24 },
+  ovEmoji: { fontSize: 72, textAlign: "center" },
+
+  ovSearching: { alignItems: "center", width: "100%" },
+  ovSearchTitle: { color: COLORS.white, fontSize: 20, fontWeight: "700", textAlign: "center", marginTop: 28, lineHeight: 28 },
+  ovSearchSub: { color: COLORS.grayDim, fontSize: 13, textAlign: "center", marginTop: 10, lineHeight: 20 },
+  ovAddrRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 20, paddingHorizontal: 8 },
+  ovAddrIcon: { fontSize: 14, marginTop: 1 },
+  ovAddrText: { color: COLORS.red, fontSize: 13, fontWeight: "600", flex: 1, textAlign: "center" },
+
+  ovConfirmed: { width: "100%", alignItems: "center" },
+  ovLiveBadge: { position: "absolute", top: -60, right: 0, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: COLORS.red, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  ovLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.white },
+  ovLiveText: { color: COLORS.white, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  ovEtaRow: { flexDirection: "row", alignItems: "center", width: "100%", marginTop: 28, padding: 18, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 16 },
+  ovEtaBox: { width: 68, height: 68, borderRadius: 14, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
+  ovEtaNum: { color: COLORS.white, fontSize: 28, fontWeight: "900", lineHeight: 32 },
+  ovEtaUnit: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: "600" },
+  ovBlueDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#3b82f6" },
+  ovEtaStatus: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  ovEtaSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 4 },
+  ovTeamCard: { flexDirection: "row", alignItems: "center", width: "100%", marginTop: 14, padding: 16, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 0.5, borderColor: "rgba(255,255,255,0.08)", borderRadius: 16 },
+  ovTeamAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  ovTeamName: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
+  ovTeamInfo: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  ovTeamStar: { color: "#f59e0b", fontSize: 13 },
+  ovTeamRating: { color: COLORS.white, fontSize: 13, fontWeight: "700" },
+  ovTeamBtns: { gap: 10 },
+  ovCallBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
+  ovMsgBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  ovCancelBtn: { marginTop: 28, paddingVertical: 14, paddingHorizontal: 40, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", borderRadius: 12 },
+  ovCancelText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "600" },
 });

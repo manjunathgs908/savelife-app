@@ -24,11 +24,9 @@ export const AMB_TYPES = [
   { id: "mort", icon: "🕊", name: "Mortuary", desc: "Deceased Transport" },
 ];
 export const SERVICES = [
-  { icon: "📅", label: "Schedule", screen: "Schedule" },
   { icon: "✈️", label: "Air", screen: "AirAmbulance" },
   { icon: "🎪", label: "Event", screen: "EventAmbulance" },
   { icon: "🛡️", label: "Standby", screen: "Standby" },
-  { icon: "🏠", label: "Home Care", screen: "HomeCare" },
   { icon: "❄️", label: "Freezer Box", screen: "FreezerBox" },
   { icon: "⚰️", label: "Remains", screen: "Remains" },
   { icon: "🕉️", label: "Antim Yatra", screen: "AntimYatra" },

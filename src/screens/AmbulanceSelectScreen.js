@@ -23,7 +23,13 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
   useEffect(() => {
     fetch(PRICING_API)
       .then(r => r.json())
-      .then(d => { if (d.success) setPricingList(d.pricing); })
+      .then(d => {
+        if (d.success) {
+          setPricingList(d.pricing.filter(
+            p => p.serviceType !== "BODY_MINI" && p.serviceType !== "BODY_TEMPO"
+          ));
+        }
+      })
       .catch(() => {}); // silent fallback to local AMB_RATES
   }, []);
 
@@ -87,7 +93,7 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
       >
         <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
 
-        {AMBULANCE_TYPES.map(amb => {
+        {AMBULANCE_TYPES.filter(amb => amb.id !== "body_mini" && amb.id !== "body_tempo").map(amb => {
           const info = AMB_RATES[amb.id];
           const est = calcFare(amb.id, dist, pricingList, AMB_RATES).total;
           const isActive = selected === amb.id;

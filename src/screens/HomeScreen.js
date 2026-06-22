@@ -15,7 +15,7 @@ const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 const CARD_GAP = 10;
 const SIDE_PAD = 16;
 const CARD_W   = (SCREEN_W - SIDE_PAD * 2 - CARD_GAP * 2) / 3;
-const CARD_H   = Math.round(CARD_W * 1.28);   // ≈ 138 px on 375 pt screen
+const CARD_H   = Math.round(CARD_W * 0.95);   // ≈ 103 px on 375 pt screen
 
 const MAP_H   = 225;    // map container height
 const OVERLAP = 16;     // how far the location card slides over the map bottom
@@ -76,30 +76,26 @@ async function reverseGeocode(lat, lng) {
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// ─── 10 service cards ─────────────────────────────────────────────────────────
+// ─── 9 service cards ──────────────────────────────────────────────────────────
 // Grid layout:
-//  Row 1 → Emergency · Schedule · Air Ambulance
-//  Row 2 → Air Cargo · Freezer Box · Dead Body Transport
-//  Row 3 → Event · Antim Yatra · Train
-//  Row 4 → Standby (1 col) · Promo banner (2 cols)
+//  Row 1 → Emergency · Air Ambulance · Air Cargo
+//  Row 2 → Freezer Box · Dead Body Transport · Event
+//  Row 3 → Antim Yatra · Train Transport · Standby Ambulance
 const SERVICES = [
   { icon: "🚑", label: "Emergency\nAmbulance", subtitle: "Fastest Response",
     screen: "BookingFlow",    bg: "#e8192c", light: false, popular: true,
     gloss: "rgba(255,255,255,0.26)" },
-  { icon: "📅", label: "Schedule\nAmbulance",  subtitle: "Book in Advance",
-    screen: "Schedule",       bg: "#1a56db", light: false, popular: false,
-    gloss: "rgba(255,255,255,0.22)" },
   { icon: "🚁", label: "Air Ambulance",         subtitle: "Quick & Safe",
     screen: "AirAmbulance",   bg: "#0d9488", light: false, popular: false,
     gloss: "rgba(255,255,255,0.22)" },
   { icon: "✈️", label: "Air Cargo",             subtitle: "Body Shifting",
-    screen: "HomeCare",       bg: "#5b21b6", light: false, popular: false,
+    screen: "Remains",        bg: "#5b21b6", light: false, popular: false,
     gloss: "rgba(255,255,255,0.20)" },
   { icon: "❄️", label: "Freezer Box",           subtitle: "Safe & Hygienic",
     screen: "FreezerBox",     bg: "#6d28d9", light: false, popular: false,
     gloss: "rgba(255,255,255,0.20)" },
   { icon: "⚰️", label: "Dead Body\nTransport",  subtitle: "Dignified Service",
-    screen: "Remains",        bg: "#ea580c", light: false, popular: false,
+    screen: "DeadBodyTransport", bg: "#ea580c", light: false, popular: false,
     gloss: "rgba(255,255,255,0.22)" },
   { icon: "🎪", label: "Event\nAmbulance",       subtitle: "Events & Occasions",
     screen: "EventAmbulance", bg: "#d97706", light: false, popular: false,
@@ -141,13 +137,12 @@ function AmbPin({ type }) {
 }
 
 // ─── Service card ─────────────────────────────────────────────────────────────
-function ServiceCard({ svc, onPress, fixedWidth }) {
+function ServiceCard({ svc, onPress }) {
   return (
     <TouchableOpacity
       style={[
         styles.svcCard,
         { backgroundColor: svc.bg },
-        fixedWidth && { flex: 0, width: CARD_W },
       ]}
       onPress={onPress}
       activeOpacity={0.80}
@@ -183,16 +178,16 @@ function ServiceCard({ svc, onPress, fixedWidth }) {
   );
 }
 
-// ─── Promotional banner (spans 2 columns) ─────────────────────────────────────
-function PromoCard() {
+// ─── Promotional banner ────────────────────────────────────────────────────────
+function PromoBanner() {
   return (
-    <View style={styles.promoCard}>
+    <View style={styles.promoBanner}>
       <View style={styles.promoGloss} />
 
       <View style={styles.promoLeft}>
-        <Text style={styles.promoTagline}>Fast.{"\n"}Safe.{"\n"}Reliable.</Text>
+        <Text style={styles.promoTagline}>Fast. Safe. Reliable.</Text>
         <Text style={styles.promoBody}>
-          SaveLife is always there{"\n"}when you need us.
+          SaveLife is always there when you need us.
         </Text>
         <TouchableOpacity style={styles.promoBtn} activeOpacity={0.8}>
           <Text style={styles.promoBtnTxt}>Know More  →</Text>
@@ -201,7 +196,6 @@ function PromoCard() {
 
       <View style={styles.promoRight}>
         <Text style={styles.promoAmbEmoji}>🚑</Text>
-        <Text style={styles.promoBrandLbl}>SaveLife</Text>
       </View>
     </View>
   );
@@ -273,10 +267,11 @@ export default function HomeScreen({ navigation }) {
   // ── Booking flow entry point — tapping the search bar or the Emergency
   //    Ambulance card both open the full Destination screen, where pickup
   //    (auto-detected GPS) and the hospital/destination search both live.
-  function openDestinationScreen() {
+  function openDestinationScreen(flow) {
     navigation.navigate("DestinationScreen", {
       gpsCoord: userCoord,
       gpsLabel: userLabel,
+      flow,
     });
   }
 
@@ -425,17 +420,9 @@ export default function HomeScreen({ navigation }) {
                 ))}
               </View>
             ))}
-
-            {/* Row 4 : Standby (1 col) + Promo banner (fills remaining ≈ 2 cols) */}
-            <View style={styles.gridRow}>
-              <ServiceCard
-                svc={SERVICES[9]}
-                onPress={() => navigation.navigate(SERVICES[9].screen)}
-                fixedWidth
-              />
-              <PromoCard />
-            </View>
           </View>
+
+          <PromoBanner />
 
         </View>
       </ScrollView>
@@ -650,7 +637,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: CARD_H,
     borderRadius: 16,
-    padding: 11,
+    padding: 9,
     overflow: "hidden",        // clips the cardGloss circle
     shadowColor: "#000",
     shadowOpacity: 0.13,
@@ -677,24 +664,24 @@ const styles = StyleSheet.create({
   popularTxt: { color: "#fff", fontSize: 9, fontWeight: "800" },
 
   // Icon area — expands to fill card top
-  iconWrap: { flex: 1, justifyContent: "flex-start", paddingTop: 4 },
-  svcEmoji: { fontSize: 38, lineHeight: 44 },
+  iconWrap: { flex: 1, justifyContent: "flex-start", paddingTop: 2 },
+  svcEmoji: { fontSize: 28, lineHeight: 32 },
 
   // Label + subtitle
-  svcName: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
+  svcName: { fontSize: 11, fontWeight: "700", lineHeight: 14 },
   nameWhite: { color: "#ffffff" },
   nameDark:  { color: "#78350f" },
-  svcSub:    { fontSize: 10, marginTop: 2 },
+  svcSub:    { fontSize: 9, marginTop: 1 },
   subWhite:  { color: "rgba(255,255,255,0.76)" },
   subDark:   { color: "#92400e" },
 
   // ── Promo banner ─────────────────────────────────────────────────────────────
-  promoCard: {
-    flex: 1,
-    height: CARD_H,
+  promoBanner: {
+    marginTop: CARD_GAP,
     borderRadius: 16,
     backgroundColor: "#fff5f5",
     flexDirection: "row",
+    alignItems: "center",
     overflow: "hidden",
     shadowColor: COLORS.red,
     shadowOpacity: 0.10, shadowRadius: 8,
@@ -711,34 +698,30 @@ const styles = StyleSheet.create({
   },
 
   promoLeft: {
-    flex: 1, padding: 11,
-    justifyContent: "space-between",
+    flex: 1, padding: 14,
   },
   promoTagline: {
     color: COLORS.red,
-    fontSize: 12.5, fontWeight: "900",
-    letterSpacing: -0.2, lineHeight: 16,
+    fontSize: 15, fontWeight: "900",
+    letterSpacing: -0.2, lineHeight: 19,
   },
   promoBody: {
     color: COLORS.gray,
-    fontSize: 9, lineHeight: 13, fontWeight: "500",
+    fontSize: 12, lineHeight: 16, fontWeight: "500",
+    marginTop: 4,
   },
   promoBtn: {
     alignSelf: "flex-start",
+    marginTop: 10,
     borderWidth: 1.5, borderColor: COLORS.red,
-    borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3.5,
+    borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5,
   },
-  promoBtnTxt: { color: COLORS.red, fontSize: 9, fontWeight: "700" },
+  promoBtnTxt: { color: COLORS.red, fontSize: 11, fontWeight: "700" },
 
   promoRight: {
-    width: 62,
-    alignItems: "center", justifyContent: "flex-end",
-    paddingBottom: 8, paddingRight: 4,
+    width: 72,
+    alignItems: "center", justifyContent: "center",
   },
-  promoAmbEmoji: { fontSize: 38, lineHeight: 44 },
-  promoBrandLbl: {
-    color: COLORS.red, fontSize: 7.5, fontWeight: "800",
-    letterSpacing: 0.3, marginTop: 2,
-  },
+  promoAmbEmoji: { fontSize: 40, lineHeight: 46 },
 });
 

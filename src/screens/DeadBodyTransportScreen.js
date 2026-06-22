@@ -1,29 +1,20 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Modal, Platform,
 } from "react-native";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
-import { getRouteInfo, haversineDistanceKm, estimateRouteDurationSeconds } from "../utils/routeUtils";
-import { AMBULANCE_TYPES, AMB_DISPLAY } from "../utils/ambulanceCatalog";
+import { AMBULANCE_TYPES, AMB_RATES } from "../utils/ambulanceCatalog";
+import {
+  getRouteInfo,
+  haversineDistanceKm,
+  estimateRouteDurationSeconds,
+} from "../utils/routeUtils";
 
-const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
-
-function decodePolyline(encoded) {
-  const pts = [];
-  let i = 0, lat = 0, lng = 0;
-  while (i < encoded.length) {
-    let b, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = result = 0;
-    do { b = encoded.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-  }
-  return pts;
-}
+// Strict filter — this screen only ever lists the two body-shifting vehicles.
+const BODY_TYPES = AMBULANCE_TYPES.filter(a => a.id === "body_mini" || a.id === "body_tempo");
+const BODY_SERVICE_TYPES = ["BODY_MINI", "BODY_TEMPO"];
 
 function fmtDate(d) {
   return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
@@ -51,7 +42,7 @@ function ScheduleTypeSheet({ visible, onClose, onPickNow, onPickSchedule }) {
       <View style={bsh.kvWrap} pointerEvents="box-none">
         <View style={bsh.sheet}>
           <View style={bsh.handle} />
-          <Text style={bsh.title}>When do you need the ambulance?</Text>
+          <Text style={bsh.title}>When do you need the vehicle?</Text>
           <Text style={bsh.subtitle}>Choose now or schedule for later</Text>
 
           <TouchableOpacity style={bsh.row} onPress={onPickNow} activeOpacity={0.75}>
@@ -60,7 +51,7 @@ function ScheduleTypeSheet({ visible, onClose, onPickNow, onPickSchedule }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={bsh.rowLabel}>Now</Text>
-              <Text style={bsh.rowSub}>Get an ambulance right away</Text>
+              <Text style={bsh.rowSub}>Dispatch right away</Text>
             </View>
           </TouchableOpacity>
 
@@ -69,7 +60,7 @@ function ScheduleTypeSheet({ visible, onClose, onPickNow, onPickSchedule }) {
               <Text style={{ fontSize: 18 }}>🕐</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={bsh.rowLabel}>Schedule Ambulance</Text>
+              <Text style={bsh.rowLabel}>Schedule Transport</Text>
               <Text style={bsh.rowSub}>Book for a later date & time</Text>
             </View>
           </TouchableOpacity>
@@ -87,7 +78,7 @@ function ScheduleDetailSheet({ visible, date, onClose, onPickDate, onPickTime, o
       <View style={bsh.kvWrap} pointerEvents="box-none">
         <View style={bsh.sheet}>
           <View style={bsh.handle} />
-          <Text style={bsh.title}>Schedule Ambulance</Text>
+          <Text style={bsh.title}>Schedule Transport</Text>
           <Text style={bsh.subtitle}>Choose a date and time for pickup</Text>
 
           <View style={bsh.chipRow}>
@@ -231,8 +222,8 @@ function DateTimePickerModal({ visible, mode, value, onConfirm, onClose }) {
   );
 }
 
-// ─── Main screen — Now/Schedule + ambulance list with calculated prices ───────
-export default function AmbulanceListScreen({ navigation, route }) {
+// ─── Main screen — Now/Schedule + body-shifting vehicle list with calculated prices ───
+export default function DeadBodyTransportScreen({ navigation, route }) {
   const { pickupCoord, pickupLabel, dropCoord, dropLabel, patientType, contactName, contactPhone } = route.params;
 
   const [dist, setDist]         = useState(null);
@@ -247,35 +238,44 @@ export default function AmbulanceListScreen({ navigation, route }) {
   const [scheduleDetailVisible, setScheduleDetailVisible] = useState(false);
 
   const [pricingList,     setPricingList]     = useState([]);
-  const [selectedAmbType, setSelectedAmbType] = useState("bls");
+  const [selectedAmbType, setSelectedAmbType] = useState("body_mini");
 
+  // Strict MongoDB filter — only BODY_MINI / BODY_TEMPO docs ever reach this screen's state.
   useEffect(() => {
     fetch(PRICING_API)
       .then(r => r.json())
-      .then(d => { if (d.success) setPricingList(d.pricing); })
-      .catch(() => {}); // silent fallback — calcFare returns 0 if pricingList is empty
+      .then(d => {
+        if (!d.success) return;
+        const bodyOnly = d.pricing.filter(p => BODY_SERVICE_TYPES.includes(p.serviceType?.toUpperCase()));
+        setPricingList(bodyOnly);
+      })
+      .catch(() => {}); // silent fallback to local AMB_RATES
   }, []);
 
   // Distance/duration via Directions API with a straight-line Haversine fallback.
   useEffect(() => {
     if (!pickupCoord || !dropCoord) { setRouteLoading(false); return; }
 
+    let active = true;
     const fallbackDist = haversineDistanceKm(pickupCoord, dropCoord);
-    setDist(parseFloat(fallbackDist.toFixed(1)));
+    setDist(fallbackDist);
     setDuration(estimateRouteDurationSeconds(fallbackDist));
     setRouteLoading(true);
 
-    (async () => {
-      try {
-        const route = await getRouteInfo(pickupCoord, dropCoord);
+    getRouteInfo(pickupCoord, dropCoord)
+      .then(route => {
+        if (!active) return;
         setDist(route.distance);
         setDuration(route.duration);
-      } catch (err) {
-        console.warn("[AmbulanceListScreen] route fetch error:", err?.message ?? err);
-      } finally {
-        setRouteLoading(false);
-      }
-    })();
+      })
+      .catch(err => {
+        console.warn("[DeadBodyTransportScreen] route fetch error:", err?.message ?? err);
+      })
+      .finally(() => {
+        if (active) setRouteLoading(false);
+      });
+
+    return () => { active = false; };
   }, [pickupCoord, dropCoord]);
 
   function handlePickNow() {
@@ -293,7 +293,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
     setScheduleDetailVisible(false);
   }
 
-  // Same param shape AmbulanceSelectScreen.handleNext always sent to ConfirmBooking.
+  // Same param shape AmbulanceListScreen.handleConfirmType always sent to ConfirmBooking.
   function handleConfirmType() {
     navigation.navigate("ConfirmBooking", {
       pickupLabel,
@@ -306,7 +306,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
       contactName,
       contactPhone,
       selectedType: selectedAmbType,
-      selectedAmb: AMBULANCE_TYPES.find(a => a.id === selectedAmbType),
+      selectedAmb: BODY_TYPES.find(a => a.id === selectedAmbType),
       pricingList,
     });
   }
@@ -319,8 +319,8 @@ export default function AmbulanceListScreen({ navigation, route }) {
           <Text style={styles.backArrow}>←</Text>
         </TouchableOpacity>
         <View>
-          <Text style={styles.headerTitle}>Choose Ambulance</Text>
-          <Text style={styles.headerSub}>Select type for your trip</Text>
+          <Text style={styles.headerTitle}>Dead Body Transport</Text>
+          <Text style={styles.headerSub}>Select vehicle for your trip</Text>
         </View>
       </View>
 
@@ -366,17 +366,17 @@ export default function AmbulanceListScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
-      {/* Ambulance type list */}
+      {/* Body-shifting vehicle list */}
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
+        <Text style={styles.listHeading}>BODY SHIFTING VEHICLES</Text>
 
-        {AMBULANCE_TYPES.map(amb => {
-          const info     = AMB_DISPLAY[amb.id];
-          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_DISPLAY).total;
+        {BODY_TYPES.map(amb => {
+          const info     = AMB_RATES[amb.id];
+          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
           const isActive = selectedAmbType === amb.id;
 
           return (
@@ -402,7 +402,8 @@ export default function AmbulanceListScreen({ navigation, route }) {
                   <Text style={styles.ambDesc}>{amb.desc}</Text>
                   <View style={styles.metaRow}>
                     <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                    <Text style={styles.metaChip}>Slab pricing</Text>
+                    {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
+                    {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
                   </View>
                 </View>
 
@@ -426,15 +427,15 @@ export default function AmbulanceListScreen({ navigation, route }) {
       {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
-          <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
-          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_DISPLAY).total.toLocaleString()} est.</Text>
+          <Text style={styles.footerLabel}>Selected · {BODY_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
+          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.</Text>
         </View>
         <TouchableOpacity style={styles.nextBtn} onPress={handleConfirmType} activeOpacity={0.85}>
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>
         </TouchableOpacity>
       </View>
 
-      {/* "Now" vs "Schedule Ambulance" */}
+      {/* "Now" vs "Schedule Transport" */}
       <ScheduleTypeSheet
         visible={scheduleTypeVisible}
         onClose={() => setScheduleTypeVisible(false)}
@@ -588,7 +589,7 @@ const styles = StyleSheet.create({
   nextBtnTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 });
 
-// ─── Patient / schedule bottom-sheet shell styles ──────────────────────────────
+// ─── Schedule bottom-sheet shell styles ────────────────────────────────────────
 const bsh = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
   kvWrap: { flex: 1, justifyContent: "flex-end" },
