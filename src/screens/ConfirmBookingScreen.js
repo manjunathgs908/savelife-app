@@ -31,19 +31,6 @@ function fmtDateTime(iso) {
   });
 }
 
-function FareRow({ label, value, bold }) {
-  return (
-    <View style={styles.fareRow}>
-      <Text style={[styles.fareLabel, bold && { color: COLORS.text, fontWeight: "700", fontSize: 15 }]}>
-        {label}
-      </Text>
-      <Text style={[styles.fareValue, bold && { color: COLORS.red, fontWeight: "800", fontSize: 16 }]}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 export default function ConfirmBookingScreen({ navigation, route }) {
   const {
     pickupLabel, dropLabel,
@@ -68,7 +55,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const amb = selectedAmb || { icon: "🚑", name: "Ambulance", desc: "" };
   const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
-  const { distFare, base, total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
+  const { total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
 
   // AC price: use per-km from API doc if available, else flat fallback
   const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
@@ -129,11 +116,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <Text style={{ fontSize: 36 }}>{amb.icon}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.ambName}>{amb.name} Ambulance</Text>
+            <Text style={styles.ambName}>{amb.name}</Text>
             <Text style={styles.ambDesc}>{info.label}</Text>
-          </View>
-          <View style={styles.ambRate}>
-            <Text style={styles.ambRateTxt}>{base === 0 ? "Slab pricing" : `₹${info.km}/km`}</Text>
           </View>
         </View>
 
@@ -187,7 +171,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             </View>
           ) : (
             <View style={styles.laterBadge}>
-              <Text style={styles.laterIco}>📅</Text>
+              <Text style={styles.laterIco}>🕐</Text>
               <View>
                 <Text style={styles.laterLabel}>Scheduled for</Text>
                 <Text style={styles.laterDate}>{fmtDateTime(scheduleDate)}</Text>
@@ -219,36 +203,6 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             </View>
           </TouchableOpacity>
 
-        </View>
-
-        {/* Fare breakdown */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIco}>💰</Text>
-            <Text style={styles.cardTitle}>Fare Breakdown</Text>
-          </View>
-
-          <FareRow
-            label={
-              base === 0
-                ? `Distance fare (${dist.toFixed(1)} km · slab pricing)`
-                : `Distance fare (${dist.toFixed(1)} km × ₹${info.km})`
-            }
-            value={`₹${distFare.toLocaleString()}`}
-          />
-          {base > 0 && (
-            <FareRow label="Base charge" value={`₹${base.toLocaleString()}`} />
-          )}
-          {acEnabled && <FareRow label="AC charge" value={`₹${acPrice.toLocaleString()}`} />}
-          <View style={styles.fareDivider} />
-          <FareRow label="Estimated Total" value={`₹${total.toLocaleString()}`} bold />
-
-          <View style={styles.fareNote}>
-            <Text style={styles.fareNoteIco}>ℹ️</Text>
-            <Text style={styles.fareNoteTxt}>
-              Final amount may vary based on actual distance and add-ons. Payment after the ride.
-            </Text>
-          </View>
         </View>
 
         {/* Safety note */}
@@ -314,11 +268,6 @@ const styles = StyleSheet.create({
   },
   ambName: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
   ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
-  ambRate: {
-    backgroundColor: COLORS.red, borderRadius: 10,
-    paddingHorizontal: 10, paddingVertical: 6,
-  },
-  ambRateTxt: { color: COLORS.white, fontSize: 12, fontWeight: "700" },
 
   // Card
   card: {
@@ -413,26 +362,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.red, borderColor: COLORS.red,
   },
   checkmark: { color: COLORS.white, fontSize: 13, fontWeight: "700" },
-
-  // Fare
-  fareRow: {
-    flexDirection: "row", justifyContent: "space-between",
-    paddingVertical: 8,
-  },
-  fareLabel: { color: COLORS.grayDim, fontSize: 13 },
-  fareValue: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
-  fareDivider: {
-    height: 0.5,
-    backgroundColor: "rgba(0,0,0,0.08)",
-    marginVertical: 6,
-  },
-  fareNote: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    marginTop: 10, padding: 10,
-    backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 10,
-  },
-  fareNoteIco: { fontSize: 14, marginTop: 1 },
-  fareNoteTxt: { flex: 1, color: COLORS.grayDim, fontSize: 11, lineHeight: 16 },
 
   // Safety
   safetyBox: {

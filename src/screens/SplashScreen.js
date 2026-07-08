@@ -1,10 +1,14 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { COLORS } from "../theme";
+import storage from "../utils/storage";
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
-    const t = setTimeout(() => navigation.replace("Login"), 1800);
+    const t = setTimeout(async () => {
+      const token = await storage.getItem("userToken");
+      navigation.replace(token ? "Main" : "Login");
+    }, 1800);
     return () => clearTimeout(t);
   }, []);
 

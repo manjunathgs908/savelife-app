@@ -10,6 +10,14 @@ const PROFILE_DEFAULTS = { name: "", phone: "" };
 
 const BOX_NAMES = { normal: "Normal Box", standard: "Standard Box", vip: "VIP / Digital Box" };
 
+const CANCEL_REASONS = [
+  "No longer needed",
+  "Found another service",
+  "Wrong location selected",
+  "Booked by mistake",
+  "Other",
+];
+
 // Maps the local box id (set by FreezerBoxScreen's BOX_TYPES) to the boxId
 // string stored in the MongoDB durations/floors collections.
 const BOX_ID_MAP = { normal: "normal_box", standard: "standard_box", vip: "vip_digital_box" };
@@ -29,20 +37,28 @@ const TIME_SLOT_LABELS = {
 function formatScheduledDate(isoString) {
   if (!isoString) return null;
   const date = new Date(isoString);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((date - today) / 86400000);
-  if (diffDays === 1) return "Tomorrow";
-  if (diffDays === 2) return "Day After";
   return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
+function formatScheduledTime(isoString) {
+  if (!isoString) return null;
+  return new Date(isoString).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
 function formatDeliveryLine(selectedDeliveryType, scheduledDate, scheduledTimeSlot) {
-  if (selectedDeliveryType === "scheduled") {
+  console.log("[formatDeliveryLine] selectedDeliveryType:", selectedDeliveryType, "scheduledDate:", scheduledDate);
+  // A non-null scheduledDate means the user confirmed a future date/time in
+  // the schedule modal — trust that over selectedDeliveryType so a mismatched
+  // or stale type string can never mask a real scheduled selection.
+  if (selectedDeliveryType === "scheduled" || scheduledDate) {
     const dateLabel = formatScheduledDate(scheduledDate);
+    // FreezerBoxScreen's modal captures an exact hour/minute, not a slot
+    // bucket, so prefer the precise time pulled from scheduledDate itself.
+    const timeLabel = formatScheduledTime(scheduledDate);
+    if (dateLabel && timeLabel) return `Scheduled: ${dateLabel}, ${timeLabel}`;
     const slot = TIME_SLOT_LABELS[scheduledTimeSlot];
-    if (dateLabel && slot) return `📅 Scheduled: ${dateLabel} (${slot.label} - ${slot.sub})`;
-    return "📅 Scheduled delivery";
+    if (dateLabel && slot) return `Scheduled: ${dateLabel} (${slot.label} - ${slot.sub})`;
+    return "Scheduled delivery";
   }
   return "⚡ Delivery: Express (Today / Now)";
 }
@@ -109,6 +125,9 @@ export default function FreezerBoxBookingScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [bookingPhase, setBookingPhase] = useState("searching");
+
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState(null);
 
   const pulseAnim    = useRef(new Animated.Value(1)).current;
   const iconMoveAnim = useRef(new Animated.Value(0)).current;
@@ -201,10 +220,29 @@ export default function FreezerBoxBookingScreen({ navigation, route }) {
   }, [selectedDuration, selectedFloor]);
 
   const isPhoneValid = /^\d{10}$/.test(phone);
-  const canSubmit = !!selectedDuration && !!selectedFloor && customerName.trim().length > 0 && isPhoneValid;
+  const canSubmit = !!selectedDuration && !!selectedFloor;
 
   function handleBack() {
     navigation.goBack();
+  }
+
+  function openCancelModal() {
+    setCancelReason(null);
+    setCancelModalVisible(true);
+  }
+
+  function closeCancelModal() {
+    setCancelModalVisible(false);
+  }
+
+  function handleConfirmCancel() {
+    if (!cancelReason) return;
+    setCancelModalVisible(false);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate("Main");
+    }
   }
 
   async function handleSubmit() {
@@ -262,7 +300,7 @@ export default function FreezerBoxBookingScreen({ navigation, route }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+        <TouchableOpacity style={styles.backBtn} onPress={openCancelModal}>
           <Text style={{ color: COLORS.text, fontSize: 20 }}>←</Text>
         </TouchableOpacity>
         <View>
@@ -374,30 +412,6 @@ export default function FreezerBoxBookingScreen({ navigation, route }) {
           </TouchableOpacity>
         ))}
 
-        {/* Contact details */}
-        <Text style={[styles.q, { marginTop: 8 }]}>Contact Details</Text>
-        <Text style={styles.fieldLabel}>CUSTOMER NAME</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter full name"
-          placeholderTextColor={COLORS.grayDim}
-          value={customerName}
-          onChangeText={setCustomerName}
-        />
-        <Text style={styles.fieldLabel}>MOBILE NUMBER</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="10-digit mobile number"
-          placeholderTextColor={COLORS.grayDim}
-          keyboardType="phone-pad"
-          maxLength={10}
-          value={phone}
-          onChangeText={t => setPhone(t.replace(/[^0-9]/g, ""))}
-        />
-        {phone.length > 0 && !isPhoneValid && (
-          <Text style={styles.errorText}>Enter a valid 10-digit mobile number</Text>
-        )}
-
         {/* Bill breakdown — summed entirely from the fetched duration + floor docs */}
         {bill && (
           <View style={styles.billCard}>
@@ -506,6 +520,61 @@ export default function FreezerBoxBookingScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Cancellation reason bottom sheet — triggered by the header back button */}
+      <Modal
+        visible={cancelModalVisible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={closeCancelModal}
+      >
+        <View style={styles.cancelModalBackdrop}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeCancelModal} />
+
+          <View style={styles.cancelModalSheet}>
+            <View style={styles.cancelModalHandle} />
+
+            <View style={styles.cancelModalHeaderRow}>
+              <Text style={styles.cancelModalTitle}>Cancel Booking?</Text>
+              <TouchableOpacity onPress={closeCancelModal}>
+                <Text style={styles.cancelModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.cancelModalSub}>Let us know why — this helps us improve</Text>
+
+            {CANCEL_REASONS.map(reason => {
+              const active = cancelReason === reason;
+              return (
+                <TouchableOpacity
+                  key={reason}
+                  style={[styles.cancelReasonRow, active && styles.cancelReasonRowActive]}
+                  onPress={() => setCancelReason(reason)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.cancelReasonText, active && styles.cancelReasonTextActive]}>{reason}</Text>
+                  <View style={[styles.cancelRadio, active && styles.cancelRadioActive]}>
+                    {active && <View style={styles.cancelRadioDot} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity style={styles.cancelGoBackBtn} onPress={closeCancelModal} activeOpacity={0.75}>
+              <Text style={styles.cancelGoBackText}>Go Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.cancelConfirmBtn, !cancelReason && { opacity: 0.4 }]}
+              disabled={!cancelReason}
+              onPress={handleConfirmCancel}
+            >
+              <Text style={styles.cancelConfirmText}>Cancel Booking</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -595,4 +664,32 @@ const styles = StyleSheet.create({
   ovMsgBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
   ovCancelBtn: { marginTop: 28, paddingVertical: 14, paddingHorizontal: 40, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", borderRadius: 12 },
   ovCancelText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "600" },
+
+  // Cancellation reason modal — bottom sheet, same shape as TrackingScreen's cancel modal
+  cancelModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  cancelModalSheet: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, maxHeight: "85%" },
+  cancelModalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.15)", alignSelf: "center", marginBottom: 14 },
+  cancelModalHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  cancelModalTitle: { color: COLORS.text, fontSize: 18, fontWeight: "700" },
+  cancelModalClose: { color: COLORS.grayDim, fontSize: 16, padding: 4 },
+  cancelModalSub: { color: COLORS.grayDim, fontSize: 12.5, marginBottom: 16 },
+
+  cancelReasonRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    padding: 14, backgroundColor: "rgba(0,0,0,0.03)",
+    borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)",
+    marginBottom: 10,
+  },
+  cancelReasonRowActive: { borderColor: "rgba(232,25,44,0.5)", backgroundColor: "rgba(232,25,44,0.08)" },
+  cancelReasonText: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
+  cancelReasonTextActive: { color: COLORS.text, fontWeight: "700" },
+  cancelRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
+  cancelRadioActive: { borderColor: COLORS.red },
+  cancelRadioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+
+  cancelGoBackBtn: { paddingVertical: 14, alignItems: "center", marginTop: 4 },
+  cancelGoBackText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "600" },
+
+  cancelConfirmBtn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center", marginTop: 4 },
+  cancelConfirmText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
 });

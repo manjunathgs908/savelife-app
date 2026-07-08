@@ -412,10 +412,11 @@ export default function HomeScreen({ navigation }) {
                   <ServiceCard
                     key={svc.label}
                     svc={svc}
-                    onPress={() => svc.screen === "BookingFlow"
-                      ? openDestinationScreen()
-                      : navigation.navigate(svc.screen)
-                    }
+                    onPress={() => {
+                      if (svc.screen === "BookingFlow") openDestinationScreen();
+                      else if (svc.screen === "DeadBodyTransport") openDestinationScreen("deadbody");
+                      else navigation.navigate(svc.screen);
+                    }}
                   />
                 ))}
               </View>

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { COLORS } from "../theme";
+import storage from "../utils/storage";
 
 export default function OtpScreen({ navigation, route }) {
   const phone = route.params?.phone || "";
@@ -42,7 +43,10 @@ export default function OtpScreen({ navigation, route }) {
         <TouchableOpacity
           style={[styles.btn, { opacity: valid ? 1 : 0.4 }]}
           disabled={!valid}
-          onPress={() => navigation.replace("Main")}
+          onPress={async () => {
+            await storage.setItem("userToken", "loggedIn");
+            navigation.replace("Main");
+          }}
         >
           <Text style={styles.btnText}>Verify & Continue</Text>
         </TouchableOpacity>
