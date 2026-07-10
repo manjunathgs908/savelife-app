@@ -172,40 +172,21 @@ const SummaryRow = ({ label, value }) => (
   </View>
 );
 
-// Shared search card for both pickup and drop — text input + GPS button
-// (pickup only) + a live autocomplete suggestions dropdown.
-function LocationSearchCard({
-  label, placeholder, value, suggestions,
-  onChangeText, onSelectSuggestion, showGps, locatingGps, onGpsPress,
-  showSchedule, scheduleLabel, onSchedulePress,
-}) {
+// One row inside the combined pickup/drop card — a colour-coded dot, the
+// text input, and (while the user is typing) its own live autocomplete
+// suggestions dropdown floating directly beneath it.
+function LocationInputRow({ dotColor, placeholder, value, suggestions, onChangeText, onSelectSuggestion }) {
   return (
-    <View style={{ marginBottom: 6 }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+    <View>
       <View style={styles.addressRow}>
-        <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>📍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.grayDim}
-            value={value}
-            onChangeText={onChangeText}
-          />
-        </View>
-        {showGps && (
-          <TouchableOpacity style={styles.gpsInlineBtn} onPress={onGpsPress} disabled={locatingGps} activeOpacity={0.8}>
-            {locatingGps
-              ? <ActivityIndicator size="small" color={COLORS.red} />
-              : <Text style={styles.gpsInlineIcon}>🎯</Text>}
-          </TouchableOpacity>
-        )}
-        {showSchedule && (
-          <TouchableOpacity style={styles.scheduleInlineBtn} onPress={onSchedulePress} activeOpacity={0.8}>
-            <Text style={styles.scheduleInlineIcon}>🕒</Text>
-            <Text style={styles.scheduleInlineText} numberOfLines={1}>{scheduleLabel}</Text>
-          </TouchableOpacity>
-        )}
+        <View style={[styles.locationDot, { backgroundColor: dotColor }]} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.grayDim}
+          value={value}
+          onChangeText={onChangeText}
+        />
       </View>
       {suggestions.length > 0 && (
         <View style={styles.suggestionsBox}>
@@ -348,7 +329,7 @@ export default function AntimYatraScreen({ navigation }) {
   // or if no matching /api/pricing document exists for that vehicle yet.
   function livePriceFor(typeId) {
     if (!typeId || distanceKm == null || pricingLoading) return null;
-    const { total } = calcFare(typeId, distanceKm, pricingList, {});
+    const { total } = calcFare(typeId, distanceKm, pricingList);
     return total > 0 ? total : null;
   }
 
@@ -407,6 +388,7 @@ export default function AntimYatraScreen({ navigation }) {
       const { address } = await reverseGeocode(coord.latitude, coord.longitude);
       setPickupCoord(coord);
       if (address) setPickupLoc(address);
+      mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
     } catch {
       Alert.alert("Location unavailable", "Could not fetch your current location. Please search for the address instead.");
     } finally {
@@ -563,6 +545,16 @@ export default function AntimYatraScreen({ navigation }) {
             <Text style={styles.title}>Antim Yatra</Text>
             <Text style={styles.stepLbl}>Step {step} of {STEPS.length}</Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.gpsBtn, locatingGps && { opacity: 0.6 }]}
+            onPress={useCurrentLocationForPickup}
+            disabled={locatingGps}
+          >
+            {locatingGps
+              ? <ActivityIndicator size="small" color={COLORS.red} />
+              : <Text style={{ fontSize: 20 }}>🎯</Text>}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -605,30 +597,37 @@ export default function AntimYatraScreen({ navigation }) {
         {/* ── Step 1: Location ── */}
         {cur === "location" && (
           <>
-            {/* Pickup / drop inputs, directly below the map */}
-            <LocationSearchCard
-              label="Pickup location *"
-              placeholder="Home / hospital address"
-              value={pickupLoc}
-              suggestions={pickupSuggestions}
-              onChangeText={t => handleLocationChange(t, "pickup")}
-              onSelectSuggestion={p => handleSelectSuggestion(p, "pickup")}
-              showGps
-              locatingGps={locatingGps}
-              onGpsPress={useCurrentLocationForPickup}
-              showSchedule
-              scheduleLabel={scheduleBtnLabel}
-              onSchedulePress={openScheduleModal}
-            />
+            {/* Pickup + drop, one combined card, directly below the map —
+                same layout as DestinationScreen's input row: card on the
+                left, Now/Schedule pill at the same row level on the right. */}
+            <View style={styles.locationCardRow}>
+              <View style={styles.locationCard}>
+                <LocationInputRow
+                  dotColor="#22c55e"
+                  placeholder="Home / hospital address"
+                  value={pickupLoc}
+                  suggestions={pickupSuggestions}
+                  onChangeText={t => handleLocationChange(t, "pickup")}
+                  onSelectSuggestion={p => handleSelectSuggestion(p, "pickup")}
+                />
 
-            <LocationSearchCard
-              label="Drop location *"
-              placeholder="Cremation ground / burial ground"
-              value={dropLoc}
-              suggestions={dropSuggestions}
-              onChangeText={t => handleLocationChange(t, "drop")}
-              onSelectSuggestion={p => handleSelectSuggestion(p, "drop")}
-            />
+                <View style={styles.locationDivider} />
+
+                <LocationInputRow
+                  dotColor={COLORS.red}
+                  placeholder="Cremation ground / burial ground"
+                  value={dropLoc}
+                  suggestions={dropSuggestions}
+                  onChangeText={t => handleLocationChange(t, "drop")}
+                  onSelectSuggestion={p => handleSelectSuggestion(p, "drop")}
+                />
+              </View>
+
+              <TouchableOpacity style={styles.nowBtn} onPress={openScheduleModal} activeOpacity={0.85}>
+                <Text style={styles.nowBtnIco}>🕐</Text>
+                <Text style={styles.nowBtnTxt} numberOfLines={1}>{scheduleBtnLabel}</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Vehicle cards — always shown */}
             <Text style={[styles.q, { fontSize: 16, marginTop: 14 }]}>Select Vehicle</Text>
@@ -961,23 +960,28 @@ const styles = StyleSheet.create({
   q: { color: COLORS.text, fontSize: 19, fontWeight: "700", marginBottom: 6 },
   qHint: { color: COLORS.grayDim, fontSize: 12, marginBottom: 16 },
 
-  // Form fields
-  fieldLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
-
-  // Location search cards (pickup / drop) — search bar + a separate
-  // square button (GPS, for pickup) laid out side by side, same pattern
-  // as FreezerBoxScreen's address bar + "Now" schedule button.
-  addressRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  searchBar: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 1, borderColor: "rgba(0,0,0,0.1)", borderRadius: 12, paddingHorizontal: 12, height: 46 },
-  searchIcon: { fontSize: 13 },
+  // Pickup + drop combined card — one rounded box with both fields
+  // stacked inside and a divider between them, "Now"/Schedule pill sitting
+  // to its right at the same row level. Same layout as DestinationScreen.
+  locationCardRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
+  locationCard: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.05)",
+    borderRadius: 16, borderWidth: 1, borderColor: "rgba(0,0,0,0.1)",
+    paddingHorizontal: 14,
+  },
+  locationDivider: { height: 0.5, backgroundColor: "rgba(0,0,0,0.1)" },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13 },
+  locationDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   searchInput: { flex: 1, color: COLORS.text, fontSize: 13 },
-  gpsInlineBtn: { width: 64, height: 46, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 1, borderColor: "rgba(0,0,0,0.1)", alignItems: "center", justifyContent: "center" },
-  gpsInlineIcon: { fontSize: 18 },
 
-  // Inline Ola-style schedule button — same row as the pickup search bar
-  scheduleInlineBtn: { width: 64, height: 46, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.05)", borderWidth: 1, borderColor: "rgba(0,0,0,0.1)", alignItems: "center", justifyContent: "center" },
-  scheduleInlineIcon: { fontSize: 14 },
-  scheduleInlineText: { color: COLORS.text, fontSize: 10, fontWeight: "700", marginTop: 2 },
+  nowBtn: {
+    width: 60, alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.05)", borderRadius: 16,
+    borderWidth: 1, borderColor: "rgba(0,0,0,0.1)",
+  },
+  nowBtnIco: { fontSize: 18, marginBottom: 2 },
+  nowBtnTxt: { fontSize: 10, fontWeight: "700", color: COLORS.text },
 
   suggestionsBox: { backgroundColor: COLORS.white, borderRadius: 12, overflow: "hidden", elevation: 4, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, marginTop: 4 },
   suggRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
@@ -990,6 +994,7 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   mapDistBadge: { position: "absolute", bottom: 10, right: 10, backgroundColor: COLORS.white, borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5, elevation: 3, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
   mapDistBadgeText: { color: COLORS.text, fontSize: 11, fontWeight: "700" },
+  gpsBtn: { position: "absolute", bottom: 16, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.white, alignItems: "center", justifyContent: "center", elevation: 5, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
 
   // Vehicle option cards
   opt: { flexDirection: "row", alignItems: "center", gap: 14, padding: 15, backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", marginBottom: 10 },

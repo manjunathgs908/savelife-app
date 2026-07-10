@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Modal, Animated, Alert,
 } from "react-native";
+import * as Location from "expo-location";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
@@ -19,6 +20,19 @@ const BODY_SERVICE_TYPES = ["BODY_MINI", "BODY_TEMPO"];
 
 // Default map center shown instantly on mount, before pickupCoord resolves.
 const DEFAULT_REGION = { latitude: 12.9716, longitude: 77.5946, latitudeDelta: 0.1, longitudeDelta: 0.1 };
+
+const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${PLACES_KEY}`);
+    const data = await res.json();
+    if (data.results?.length) {
+      return { address: data.results[0].formatted_address };
+    }
+  } catch {}
+  return { address: null };
+}
 
 function fmtScheduleBadge(iso) {
   if (!iso) return null;
@@ -149,14 +163,20 @@ function WheelColumn({ data, initialIndex, onChangeIndex, renderLabel, isPastInd
 // ─── Main screen — Now/Schedule + body-shifting vehicle list with calculated prices ───
 export default function DeadBodyTransportScreen({ navigation, route }) {
   const {
-    pickupCoord   = null,
-    pickupLabel   = "",
+    pickupCoord:  initialPickupCoord = null,
+    pickupLabel:  initialPickupLabel = "",
     dropCoord     = null,
     dropLabel     = "",
     patientType   = "",
     contactName   = "",
     contactPhone  = "",
   } = route.params || {};
+
+  // Local state (not just a route.params passthrough) so the GPS button on
+  // the map can update the pickup point after this screen has mounted.
+  const [pickupCoord, setPickupCoord] = useState(initialPickupCoord);
+  const [pickupLabel, setPickupLabel] = useState(initialPickupLabel);
+  const [locatingGps, setLocatingGps] = useState(false);
 
   const [dist, setDist]         = useState(null);
   const [duration, setDuration] = useState(null);
@@ -184,6 +204,26 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
 
   const mapRef = useRef(null);
 
+  // Fetches a fresh GPS fix, recenters the map, and updates the pickup pin —
+  // same behavior as FreezerBoxScreen's gpsBtn.
+  async function goToCurrentLocation() {
+    setLocatingGps(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      const { address } = await reverseGeocode(coord.latitude, coord.longitude);
+      setPickupCoord(coord);
+      if (address) setPickupLabel(address);
+      mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 600);
+    } catch {
+      // GPS/geocoding unavailable — pickup pin stays as it was
+    } finally {
+      setLocatingGps(false);
+    }
+  }
+
   // Strict MongoDB filter — only BODY_MINI / BODY_TEMPO docs ever reach this screen's state.
   useEffect(() => {
     fetch(PRICING_API)
@@ -193,7 +233,7 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
         const bodyOnly = d.pricing.filter(p => BODY_SERVICE_TYPES.includes(p.serviceType?.toUpperCase()));
         setPricingList(bodyOnly);
       })
-      .catch(() => {}); // silent fallback to local AMB_RATES
+      .catch(() => {});
   }, []);
 
   // Distance/duration via Directions API with a straight-line Haversine fallback.
@@ -365,6 +405,16 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
           <Text style={styles.headerTitle}>Dead Body Transport</Text>
           <Text style={styles.headerSub}>Select vehicle for your trip</Text>
         </View>
+
+        <TouchableOpacity
+          style={[styles.gpsBtn, locatingGps && { opacity: 0.6 }]}
+          onPress={goToCurrentLocation}
+          disabled={locatingGps}
+        >
+          {locatingGps
+            ? <ActivityIndicator size="small" color={COLORS.red} />
+            : <Text style={{ fontSize: 20 }}>🎯</Text>}
+        </TouchableOpacity>
       </View>
 
       {/* Route summary + Now/Schedule button */}
@@ -405,7 +455,7 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
           onPress={openScheduleModal}
           activeOpacity={0.85}
         >
-          <Text style={styles.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+          <Text style={styles.nowBtnIco}>🕐</Text>
           <Text style={styles.nowBtnTxt} numberOfLines={1}>{scheduleBtnLabel}</Text>
         </TouchableOpacity>
       </View>
@@ -419,16 +469,19 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
         <Text style={styles.listHeading}>BODY SHIFTING VEHICLES</Text>
 
         {BODY_TYPES.map(amb => {
-          const info     = AMB_RATES[amb.id];
-          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
-          const isActive = selectedAmbType === amb.id;
+          const info          = AMB_RATES[amb.id];
+          const fareResult    = calcFare(amb.id, dist ?? 0, pricingList);
+          const priceAvailable = fareResult.available;
+          const est           = priceAvailable ? fareResult.total : null;
+          const isActive      = selectedAmbType === amb.id;
 
           return (
             <TouchableOpacity
               key={amb.id}
-              style={[styles.card, isActive && styles.cardActive]}
-              onPress={() => setSelectedAmbType(amb.id)}
-              activeOpacity={0.8}
+              style={[styles.card, isActive && styles.cardActive, !priceAvailable && styles.cardDisabled]}
+              onPress={() => priceAvailable && setSelectedAmbType(amb.id)}
+              activeOpacity={priceAvailable ? 0.8 : 1}
+              disabled={!priceAvailable}
             >
               {info.badge ? (
                 <View style={[styles.badge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
@@ -447,10 +500,16 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
                 </View>
 
                 <View style={styles.priceCol}>
-                  <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
-                    ₹{est.toLocaleString()}
-                  </Text>
-                  <Text style={styles.priceEst}>est.</Text>
+                  {priceAvailable ? (
+                    <>
+                      <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
+                        ₹{est.toLocaleString()}
+                      </Text>
+                      <Text style={styles.priceEst}>est.</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.priceUnavailable}>Unavailable</Text>
+                  )}
                   <View style={[styles.radio, isActive && styles.radioActive]}>
                     {isActive && <View style={styles.radioDot} />}
                   </View>
@@ -467,9 +526,21 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Selected · {BODY_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
-          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.</Text>
+          {(() => {
+            const selectedFare = calcFare(selectedAmbType, dist ?? 0, pricingList);
+            return selectedFare.available ? (
+              <Text style={styles.footerPrice}>₹{selectedFare.total.toLocaleString()} est.</Text>
+            ) : (
+              <Text style={styles.footerPriceUnavailable}>Pricing unavailable</Text>
+            );
+          })()}
         </View>
-        <TouchableOpacity style={styles.nextBtn} onPress={handleConfirmType} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={[styles.nextBtn, !calcFare(selectedAmbType, dist ?? 0, pricingList).available && styles.nextBtnDisabled]}
+          onPress={handleConfirmType}
+          activeOpacity={0.85}
+          disabled={!calcFare(selectedAmbType, dist ?? 0, pricingList).available}
+        >
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>
         </TouchableOpacity>
       </View>
@@ -599,6 +670,7 @@ const styles = StyleSheet.create({
     elevation: 4, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },
   backArrow: { color: COLORS.text, fontSize: 20 },
+  gpsBtn: { position: "absolute", bottom: 16, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.white, alignItems: "center", justifyContent: "center", elevation: 5, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
   headerTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   headerSub: { color: COLORS.grayDim, fontSize: 12, marginTop: 1 },
 
@@ -657,6 +729,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(232,25,44,0.07)",
     borderColor: "rgba(232,25,44,0.45)",
   },
+  cardDisabled: { opacity: 0.45 },
   badge: {
     alignSelf: "flex-start",
     borderRadius: 6, borderWidth: 0.5,
@@ -676,6 +749,7 @@ const styles = StyleSheet.create({
   priceCol: { alignItems: "flex-end", gap: 4 },
   priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
   priceEst: { color: COLORS.grayDim, fontSize: 10 },
+  priceUnavailable: { color: COLORS.grayDim, fontSize: 12, fontStyle: "italic" },
   radio: {
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
@@ -695,10 +769,12 @@ const styles = StyleSheet.create({
   footerLeft: { flex: 1 },
   footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
   footerPrice: { color: COLORS.text, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  footerPriceUnavailable: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700", fontStyle: "italic", marginTop: 4 },
   nextBtn: {
     backgroundColor: COLORS.red,
     borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20,
   },
+  nextBtnDisabled: { backgroundColor: "rgba(0,0,0,0.15)" },
   nextBtnTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 });
 

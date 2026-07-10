@@ -1,27 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, TextInput, ActivityIndicator,
 } from "react-native";
-import { COLORS, getBookingConfig } from "../theme";
+import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { getRouteInfo } from "../utils/routeUtils";
 
-const _bls = getBookingConfig("bls");
-const _adv = getBookingConfig("als");
+const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
-const AMB_RATES = {
-  bls:        { km: _bls.vehicles[0].rate, base: 0,    label: "Basic Life Support" },
-  bls_tempo:  {                            base: 0,    label: "Basic Life Support • Tempo Traveller" },
-  als:        { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support" },
-  als_tempo:  { km: _adv.vehicles[0].rate, base: 500,  label: "Advanced Life Support • Tempo Traveller" },
-  acls_tempo: { km: 30,                    base: 1000, label: "Advanced Cardiac Life Support • Tempo Traveller" },
-  icu:        { km: _adv.vehicles[1].rate, base: 800,  label: "Mobile Intensive Care" },
-  nicu_tempo: { km: 25,                    base: 600,  label: "Newborn Intensive Care Transport • Tempo Traveller" },
-  neo:        { km: 25,                    base: 600,  label: "Neonatal Transport" },
-  card:       { km: 30,                    base: 1000, label: "Cardiac Emergency" },
-  body_tempo: { km: 18,                    base: 350,  label: "Dead Body Transport • Tempo Traveller" },
-  body_mini:  { km: 18,                    base: 350,  label: "Dead Body Transport • Maruti Eeco" },
-  mort:       { km: 18,                    base: 350,  label: "Mortuary / Remains" },
-};
+async function fetchPlaceDetails(place_id, fallbackLabel) {
+  const res = await fetch(
+    `https://maps.googleapis.com/maps/api/place/details/json` +
+    `?place_id=${place_id}&fields=geometry,formatted_address&key=${PLACES_KEY}`
+  );
+  const data = await res.json();
+  if (!data.result?.geometry) throw new Error("no geometry");
+  return {
+    coord: {
+      latitude:  data.result.geometry.location.lat,
+      longitude: data.result.geometry.location.lng,
+    },
+    label: data.result.formatted_address || fallbackLabel,
+  };
+}
 
 function fmtDateTime(iso) {
   const d = new Date(iso);
@@ -33,7 +34,7 @@ function fmtDateTime(iso) {
 
 export default function ConfirmBookingScreen({ navigation, route }) {
   const {
-    pickupLabel, dropLabel,
+    pickupCoord, pickupLabel, dropCoord, dropLabel,
     dist, duration,
     scheduleType, scheduleDate,
     selectedType,
@@ -44,6 +45,22 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const [pricingList, setPricingList] = useState(passedPricing || []);
   const [acEnabled, setAcEnabled] = useState(false);
 
+  // Trip Type — chosen right here, this is the only place it's set
+  const [tripType, setTripType] = useState("one_way"); // "one_way" | "round_trip"
+  const [returnAddress, setReturnAddress] = useState("");
+  const [returnCoord, setReturnCoord] = useState(pickupCoord || null);
+  const [returnSameAsPickup, setReturnSameAsPickup] = useState(true);
+  const [returnQuery,       setReturnQuery]       = useState("");
+  const [returnPhase,       setReturnPhase]       = useState("idle"); // idle | loading | results | empty
+  const [returnPredictions, setReturnPredictions] = useState([]);
+  const returnDebRef = useRef(null);
+
+  // Fare-relevant distance — the fixed one-way `dist` for "One Way", doubled
+  // for a round trip back to the same pickup point, or one-way + the real
+  // drop→return driving distance when a different return address is picked.
+  const [effectiveDist, setEffectiveDist] = useState(dist);
+  const [distLoading, setDistLoading] = useState(false);
+
   useEffect(() => {
     if (passedPricing?.length) return; // already received from AmbulanceSelectScreen
     fetch(PRICING_API)
@@ -52,18 +69,123 @@ export default function ConfirmBookingScreen({ navigation, route }) {
       .catch(() => {});
   }, []);
 
+  // Keep the return address (and its coordinate) mirrored to the pickup
+  // address for as long as "Same as Pickup Address" stays checked.
+  useEffect(() => {
+    if (returnSameAsPickup) {
+      setReturnAddress(pickupLabel);
+      setReturnCoord(pickupCoord || null);
+    }
+  }, [returnSameAsPickup, pickupLabel, pickupCoord]);
+
+  // Recomputes the fare-relevant distance whenever trip type or the return
+  // point changes. Round trip to the same pickup point is just dist*2 — no
+  // API call needed. A different return address needs the real drop→return
+  // driving distance, fetched via the Directions API (same key as Places).
+  useEffect(() => {
+    if (tripType !== "round_trip") {
+      setEffectiveDist(dist);
+      return;
+    }
+    if (returnSameAsPickup) {
+      setEffectiveDist(dist * 2);
+      return;
+    }
+    if (!returnCoord || !dropCoord) {
+      // Round trip chosen, but no specific return point picked yet —
+      // dist*2 is a safe placeholder until one is.
+      setEffectiveDist(dist * 2);
+      return;
+    }
+
+    let active = true;
+    setDistLoading(true);
+    getRouteInfo(dropCoord, returnCoord)
+      .then(result => {
+        if (!active) return;
+        // Only trust a real Google-routed distance for the return leg —
+        // any failure (including getRouteInfo's own Haversine fallback)
+        // falls back to the safe dist*2 estimate per spec.
+        setEffectiveDist(result.source === "google" ? dist + result.distance : dist * 2);
+      })
+      .catch(() => {
+        if (active) setEffectiveDist(dist * 2);
+      })
+      .finally(() => {
+        if (active) setDistLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [tripType, returnSameAsPickup, returnCoord, dropCoord, dist]);
+
+  function toggleReturnSameAsPickup() {
+    setReturnSameAsPickup(prev => {
+      const next = !prev;
+      setReturnQuery("");
+      setReturnPredictions([]);
+      setReturnPhase("idle");
+      if (!next) {
+        setReturnAddress(""); // start the "different address" search empty
+        setReturnCoord(null);
+      }
+      return next;
+    });
+  }
+
+  function onChangeReturnQuery(text) {
+    setReturnQuery(text);
+    clearTimeout(returnDebRef.current);
+    if (text.length < 2) { setReturnPredictions([]); setReturnPhase("idle"); return; }
+    setReturnPhase("loading");
+    returnDebRef.current = setTimeout(async () => {
+      try {
+        const bias = pickupCoord ? `&location=${pickupCoord.latitude},${pickupCoord.longitude}&radius=50000` : "";
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+          `?input=${encodeURIComponent(text)}&key=${PLACES_KEY}&language=en&components=country:in${bias}`
+        );
+        const data = await res.json();
+        const preds = data.predictions || [];
+        setReturnPredictions(preds);
+        setReturnPhase(preds.length ? "results" : "empty");
+      } catch { setReturnPhase("empty"); }
+    }, 350);
+  }
+
+  async function handleSelectReturnPrediction(pred) {
+    try {
+      const result = await fetchPlaceDetails(pred.place_id, pred.description);
+      setReturnAddress(result.label);
+      setReturnCoord(result.coord);
+      setReturnQuery("");
+      setReturnPredictions([]);
+      setReturnPhase("idle");
+    } catch {}
+  }
+
   const amb = selectedAmb || { icon: "🚑", name: "Ambulance", desc: "" };
-  const info = AMB_RATES[selectedType] || AMB_RATES.bls;
 
-  const { total: baseFareTotal } = calcFare(selectedType, dist, pricingList, AMB_RATES);
+  // Uses effectiveDist (doubled / drop→return-adjusted for round trips) —
+  // NOT the raw one-way `dist`, which stays fixed and is only used for
+  // display in the Trip Route card and as the reported one-way leg distance.
+  //
+  // MongoDB's Pricing collection is the only source of truth here — if no
+  // active doc with slabs exists for this vehicle type, `available` is
+  // false and NOTHING is guessed. The fare section renders an unavailable
+  // state and Confirm Booking is disabled until a real doc exists.
+  const { total: baseFareTotal, available: fareAvailable } = calcFare(selectedType, effectiveDist, pricingList);
 
-  // AC price: use per-km from API doc if available, else flat fallback
+  // AC price: only offer the add-on if the Pricing doc actually defines
+  // acPerKm — no flat guessed price when it doesn't.
   const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
-  const acPrice = pricingDoc?.acPerKm ? Math.round(pricingDoc.acPerKm * dist) : 200;
+  const acAvailable = !!pricingDoc?.acPerKm;
+  const acPrice = acAvailable ? Math.round(pricingDoc.acPerKm * effectiveDist) : null;
+  const effectiveAcEnabled = acEnabled && acAvailable;
 
-  const total = baseFareTotal + (acEnabled ? acPrice : 0);
+  const total = fareAvailable ? baseFareTotal + (effectiveAcEnabled ? acPrice : 0) : null;
 
   async function handleConfirm() {
+    if (!fareAvailable) return; // safety net — button is disabled for this case too
     try {
       const response = await fetch("https://api.savelife.health/api/trips", {
         method: "POST",
@@ -72,12 +194,14 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           pickupLabel,
           dropLabel,
           dist,
+          effectiveDist,
           duration,
           selectedType,
           scheduleType,
           scheduleDate,
+          tripType,
+          returnAddress: tripType === "round_trip" ? returnAddress : null,
           acEnabled,
-          totalFare: total,
         }),
       });
 
@@ -117,9 +241,19 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.ambName}>{amb.name}</Text>
-            <Text style={styles.ambDesc}>{info.label}</Text>
+            <Text style={styles.ambDesc}>{amb.desc}</Text>
           </View>
         </View>
+
+        {/* Pricing unavailable notice */}
+        {!fareAvailable && (
+          <View style={styles.unavailableBox}>
+            <Text style={styles.unavailableIco}>⚠️</Text>
+            <Text style={styles.unavailableTxt}>
+              Pricing unavailable for this vehicle type. Booking can't be confirmed until it's added.
+            </Text>
+          </View>
+        )}
 
         {/* Route card */}
         <View style={styles.card}>
@@ -157,6 +291,95 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           </View>
         </View>
 
+        {/* Trip Type card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIco}>🔁</Text>
+            <Text style={styles.cardTitle}>Trip Type</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.tripOpt}
+            onPress={() => setTripType("one_way")}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.radio, tripType === "one_way" && styles.radioActive]}>
+              {tripType === "one_way" && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.tripOptText}>➡️ One Way</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tripOpt}
+            onPress={() => setTripType("round_trip")}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.radio, tripType === "round_trip" && styles.radioActive]}>
+              {tripType === "round_trip" && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.tripOptText}>🔄 Round Trip (Up & Down)</Text>
+          </TouchableOpacity>
+
+          {tripType === "round_trip" && (
+            <View style={styles.returnSection}>
+              <TouchableOpacity
+                style={styles.returnCheckboxRow}
+                onPress={toggleReturnSameAsPickup}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.checkbox, returnSameAsPickup && styles.checkboxActive]}>
+                  {returnSameAsPickup && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={styles.returnCheckboxLabel}>Same as Pickup Address</Text>
+              </TouchableOpacity>
+
+              {!returnSameAsPickup && (
+                <>
+                  <View style={styles.returnInputRow}>
+                    <View style={styles.greenDot} />
+                    <TextInput
+                      style={styles.returnInput}
+                      placeholder="Enter return address"
+                      placeholderTextColor={COLORS.grayDim}
+                      value={returnAddress ? returnAddress : returnQuery}
+                      onChangeText={text => {
+                        if (returnAddress) setReturnAddress("");
+                        onChangeReturnQuery(text);
+                      }}
+                      returnKeyType="search"
+                    />
+                    {returnPhase === "loading" && <ActivityIndicator size="small" color={COLORS.red} />}
+                  </View>
+
+                  {returnPredictions.length > 0 && (
+                    <View style={styles.returnSuggestionsBox}>
+                      {returnPredictions.map(item => (
+                        <TouchableOpacity
+                          key={item.place_id}
+                          style={styles.returnSuggRow}
+                          onPress={() => handleSelectReturnPrediction(item)}
+                        >
+                          <Text style={styles.returnSuggIcon}>📍</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.returnSuggMain} numberOfLines={1}>
+                              {item.structured_formatting?.main_text || item.description}
+                            </Text>
+                            {item.structured_formatting?.secondary_text ? (
+                              <Text style={styles.returnSuggSub} numberOfLines={1}>
+                                {item.structured_formatting.secondary_text}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+        </View>
+
         {/* Schedule card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -189,17 +412,22 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           </View>
 
           <TouchableOpacity
-            style={[styles.addonRow, acEnabled && styles.addonRowActive]}
-            onPress={() => setAcEnabled(v => !v)}
-            activeOpacity={0.8}
+            style={[styles.addonRow, effectiveAcEnabled && styles.addonRowActive, !acAvailable && styles.addonRowDisabled]}
+            onPress={() => acAvailable && setAcEnabled(v => !v)}
+            activeOpacity={acAvailable ? 0.8 : 1}
+            disabled={!acAvailable}
           >
             <Text style={styles.addonIco}>❄️</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.addonName}>AC Ambulance</Text>
-              <Text style={styles.addonPrice}>+₹{acPrice.toLocaleString()}</Text>
+              {acAvailable ? (
+                <Text style={styles.addonPrice}>+₹{acPrice.toLocaleString()}</Text>
+              ) : (
+                <Text style={styles.addonPriceUnavailable}>Unavailable</Text>
+              )}
             </View>
-            <View style={[styles.checkbox, acEnabled && styles.checkboxActive]}>
-              {acEnabled && <Text style={styles.checkmark}>✓</Text>}
+            <View style={[styles.checkbox, effectiveAcEnabled && styles.checkboxActive]}>
+              {effectiveAcEnabled && <Text style={styles.checkmark}>✓</Text>}
             </View>
           </TouchableOpacity>
 
@@ -223,9 +451,20 @@ export default function ConfirmBookingScreen({ navigation, route }) {
       <View style={styles.footer}>
         <View style={styles.footerPriceCol}>
           <Text style={styles.footerPriceLabel}>Est. fare</Text>
-          <Text style={styles.footerPrice}>₹{total.toLocaleString()}</Text>
+          {!fareAvailable ? (
+            <Text style={styles.footerPriceUnavailable}>Unavailable</Text>
+          ) : distLoading ? (
+            <ActivityIndicator size="small" color={COLORS.red} style={{ marginTop: 4, alignSelf: "flex-start" }} />
+          ) : (
+            <Text style={styles.footerPrice}>₹{total.toLocaleString()}</Text>
+          )}
         </View>
-        <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={[styles.confirmBtn, !fareAvailable && styles.confirmBtnDisabled]}
+          onPress={handleConfirm}
+          activeOpacity={fareAvailable ? 0.85 : 1}
+          disabled={!fareAvailable}
+        >
           <Text style={styles.confirmBtnIco}>🚑</Text>
           <Text style={styles.confirmBtnTxt}>Confirm Booking</Text>
         </TouchableOpacity>
@@ -268,6 +507,16 @@ const styles = StyleSheet.create({
   },
   ambName: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
   ambDesc: { color: COLORS.grayDim, fontSize: 12, marginTop: 3 },
+
+  // Pricing-unavailable notice
+  unavailableBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: "rgba(245,158,11,0.1)",
+    borderRadius: 12, padding: 12,
+    borderWidth: 0.5, borderColor: "rgba(245,158,11,0.3)",
+  },
+  unavailableIco: { fontSize: 16 },
+  unavailableTxt: { flex: 1, color: "#92400e", fontSize: 12.5, lineHeight: 17 },
 
   // Card
   card: {
@@ -334,6 +583,42 @@ const styles = StyleSheet.create({
   laterLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600", marginBottom: 3 },
   laterDate: { color: COLORS.text, fontSize: 13, fontWeight: "600" },
 
+  // Trip Type selector
+  tripOpt: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 },
+  tripOptText: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
+  radio: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
+    alignItems: "center", justifyContent: "center",
+  },
+  radioActive: { borderColor: COLORS.red },
+  radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
+
+  // Return address (round trip)
+  returnSection: { marginTop: 4, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: "rgba(0,0,0,0.08)" },
+  returnCheckboxRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  returnCheckboxLabel: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
+  returnInputRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 10,
+    borderWidth: 1, borderColor: "rgba(0,0,0,0.08)",
+    paddingHorizontal: 12, height: 44, marginTop: 8,
+  },
+  returnInput: { flex: 1, color: COLORS.text, fontSize: 13, fontWeight: "500" },
+  returnSuggestionsBox: {
+    backgroundColor: COLORS.white, borderRadius: 12, overflow: "hidden",
+    marginTop: 8,
+    borderWidth: 1, borderColor: "rgba(0,0,0,0.08)",
+  },
+  returnSuggRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 12, paddingVertical: 11,
+    borderBottomWidth: 0.5, borderBottomColor: "rgba(0,0,0,0.08)",
+  },
+  returnSuggIcon: { fontSize: 13 },
+  returnSuggMain: { color: COLORS.text, fontSize: 13, fontWeight: "500" },
+  returnSuggSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2 },
+
   // Add-ons
   optionalTag: {
     color: COLORS.grayDim, fontSize: 11, fontWeight: "600",
@@ -350,9 +635,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(232,25,44,0.08)",
     borderColor: "rgba(232,25,44,0.4)",
   },
+  addonRowDisabled: { opacity: 0.5 },
   addonIco: { fontSize: 24 },
   addonName: { color: COLORS.text, fontSize: 14, fontWeight: "600" },
   addonPrice: { color: COLORS.grayDim, fontSize: 12, marginTop: 2 },
+  addonPriceUnavailable: { color: COLORS.grayDim, fontSize: 12, marginTop: 2, fontStyle: "italic" },
   checkbox: {
     width: 24, height: 24, borderRadius: 7,
     borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
@@ -384,11 +671,13 @@ const styles = StyleSheet.create({
   footerPriceCol: { flex: 1 },
   footerPriceLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
   footerPrice: { color: COLORS.text, fontSize: 22, fontWeight: "800", marginTop: 2 },
+  footerPriceUnavailable: { color: COLORS.grayDim, fontSize: 15, fontWeight: "700", marginTop: 2, fontStyle: "italic" },
   confirmBtn: {
     flex: 2, flexDirection: "row",
     backgroundColor: COLORS.red, borderRadius: 14,
     paddingVertical: 15, alignItems: "center", justifyContent: "center", gap: 8,
   },
+  confirmBtnDisabled: { backgroundColor: "rgba(0,0,0,0.15)" },
   confirmBtnIco: { fontSize: 20 },
   confirmBtnTxt: { color: COLORS.white, fontSize: 15, fontWeight: "700" },
 });

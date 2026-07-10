@@ -177,7 +177,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
     fetch(PRICING_API)
       .then(r => r.json())
       .then(d => { if (d.success) setPricingList(d.pricing); })
-      .catch(() => {}); // silent fallback to local AMB_RATES
+      .catch(() => {});
   }, []);
 
   // Distance/duration via Directions API with a straight-line Haversine fallback.
@@ -289,7 +289,9 @@ export default function AmbulanceListScreen({ navigation, route }) {
   // Same param shape AmbulanceSelectScreen.handleNext always sent to ConfirmBooking.
   function handleConfirmType() {
     navigation.navigate("ConfirmBooking", {
+      pickupCoord,
       pickupLabel,
+      dropCoord,
       dropLabel,
       dist: dist ?? 5,
       duration: duration ?? 1200,
@@ -354,6 +356,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
             </View>
             <View style={styles.routeLine} />
           </View>
+
           <View style={styles.routeEndpoint}>
             <View style={styles.redDotSm} />
             <Text style={styles.routeAddr} numberOfLines={1}>{dropLabel}</Text>
@@ -365,7 +368,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
           onPress={openScheduleModal}
           activeOpacity={0.85}
         >
-          <Text style={styles.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+          <Text style={styles.nowBtnIco}>🕐</Text>
           <Text style={styles.nowBtnTxt} numberOfLines={1}>{scheduleBtnLabel}</Text>
         </TouchableOpacity>
       </View>
@@ -379,16 +382,19 @@ export default function AmbulanceListScreen({ navigation, route }) {
         <Text style={styles.listHeading}>ALL AMBULANCE TYPES</Text>
 
         {AMBULANCE_TYPES.filter(amb => amb.id !== "body_mini" && amb.id !== "body_tempo").map(amb => {
-          const info     = AMB_RATES[amb.id];
-          const est      = calcFare(amb.id, dist ?? 0, pricingList, AMB_RATES).total;
-          const isActive = selectedAmbType === amb.id;
+          const info          = AMB_RATES[amb.id];
+          const fareResult    = calcFare(amb.id, dist ?? 0, pricingList);
+          const priceAvailable = fareResult.available;
+          const est           = priceAvailable ? fareResult.total : null;
+          const isActive      = selectedAmbType === amb.id;
 
           return (
             <TouchableOpacity
               key={amb.id}
-              style={[styles.card, isActive && styles.cardActive]}
-              onPress={() => setSelectedAmbType(amb.id)}
-              activeOpacity={0.8}
+              style={[styles.card, isActive && styles.cardActive, !priceAvailable && styles.cardDisabled]}
+              onPress={() => priceAvailable && setSelectedAmbType(amb.id)}
+              activeOpacity={priceAvailable ? 0.8 : 1}
+              disabled={!priceAvailable}
             >
               {info.badge ? (
                 <View style={[styles.badge, { backgroundColor: info.color + "22", borderColor: info.color + "66" }]}>
@@ -407,10 +413,16 @@ export default function AmbulanceListScreen({ navigation, route }) {
                 </View>
 
                 <View style={styles.priceCol}>
-                  <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
-                    ₹{est.toLocaleString()}
-                  </Text>
-                  <Text style={styles.priceEst}>est.</Text>
+                  {priceAvailable ? (
+                    <>
+                      <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
+                        ₹{est.toLocaleString()}
+                      </Text>
+                      <Text style={styles.priceEst}>est.</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.priceUnavailable}>Unavailable</Text>
+                  )}
                   <View style={[styles.radio, isActive && styles.radioActive]}>
                     {isActive && <View style={styles.radioDot} />}
                   </View>
@@ -427,9 +439,21 @@ export default function AmbulanceListScreen({ navigation, route }) {
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
-          <Text style={styles.footerPrice}>₹{calcFare(selectedAmbType, dist ?? 0, pricingList, AMB_RATES).total.toLocaleString()} est.</Text>
+          {(() => {
+            const selectedFare = calcFare(selectedAmbType, dist ?? 0, pricingList);
+            return selectedFare.available ? (
+              <Text style={styles.footerPrice}>₹{selectedFare.total.toLocaleString()} est.</Text>
+            ) : (
+              <Text style={styles.footerPriceUnavailable}>Pricing unavailable</Text>
+            );
+          })()}
         </View>
-        <TouchableOpacity style={styles.nextBtn} onPress={handleConfirmType} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={[styles.nextBtn, !calcFare(selectedAmbType, dist ?? 0, pricingList).available && styles.nextBtnDisabled]}
+          onPress={handleConfirmType}
+          activeOpacity={0.85}
+          disabled={!calcFare(selectedAmbType, dist ?? 0, pricingList).available}
+        >
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>
         </TouchableOpacity>
       </View>
@@ -611,6 +635,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(232,25,44,0.07)",
     borderColor: "rgba(232,25,44,0.45)",
   },
+  cardDisabled: { opacity: 0.45 },
   badge: {
     alignSelf: "flex-start",
     borderRadius: 6, borderWidth: 0.5,
@@ -630,6 +655,7 @@ const styles = StyleSheet.create({
   priceCol: { alignItems: "flex-end", gap: 4 },
   priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
   priceEst: { color: COLORS.grayDim, fontSize: 10 },
+  priceUnavailable: { color: COLORS.grayDim, fontSize: 12, fontStyle: "italic" },
   radio: {
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
@@ -649,10 +675,12 @@ const styles = StyleSheet.create({
   footerLeft: { flex: 1 },
   footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
   footerPrice: { color: COLORS.text, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  footerPriceUnavailable: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700", fontStyle: "italic", marginTop: 4 },
   nextBtn: {
     backgroundColor: COLORS.red,
     borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20,
   },
+  nextBtnDisabled: { backgroundColor: "rgba(0,0,0,0.15)" },
   nextBtnTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 });
 

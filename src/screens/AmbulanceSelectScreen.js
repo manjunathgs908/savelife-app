@@ -33,8 +33,8 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
       .catch(() => {}); // silent fallback to local AMB_RATES
   }, []);
 
-  const r = AMB_RATES[selected];
-  const estTotal = calcFare(selected, dist, pricingList, AMB_RATES).total;
+  const selectedFare = calcFare(selected, dist, pricingList);
+  const estTotal = selectedFare.available ? selectedFare.total : null;
 
   function handleNext() {
     navigation.navigate("ConfirmBooking", {
@@ -95,15 +95,18 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
 
         {AMBULANCE_TYPES.filter(amb => amb.id !== "body_mini" && amb.id !== "body_tempo").map(amb => {
           const info = AMB_RATES[amb.id];
-          const est = calcFare(amb.id, dist, pricingList, AMB_RATES).total;
+          const fareResult = calcFare(amb.id, dist, pricingList);
+          const priceAvailable = fareResult.available;
+          const est = priceAvailable ? fareResult.total : null;
           const isActive = selected === amb.id;
 
           return (
             <React.Fragment key={amb.id}>
               <TouchableOpacity
-                style={[styles.card, isActive && styles.cardActive]}
-                onPress={() => setSelected(amb.id)}
-                activeOpacity={0.8}
+                style={[styles.card, isActive && styles.cardActive, !priceAvailable && styles.cardDisabled]}
+                onPress={() => priceAvailable && setSelected(amb.id)}
+                activeOpacity={priceAvailable ? 0.8 : 1}
+                disabled={!priceAvailable}
               >
                 {/* Badge */}
                 {info.badge ? (
@@ -124,17 +127,21 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
                     <Text style={styles.ambDesc}>{amb.desc}</Text>
                     <View style={styles.metaRow}>
                       <Text style={styles.metaChip}>⏱ ~{info.eta} min away</Text>
-                      {info.km ? <Text style={styles.metaChip}>₹{info.km}/km</Text> : <Text style={styles.metaChip}>Slab pricing</Text>}
-                      {info.base > 0 && <Text style={styles.metaChip}>+₹{info.base} base</Text>}
                     </View>
                   </View>
 
                   {/* Price + radio */}
                   <View style={styles.priceCol}>
-                    <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
-                      ₹{est.toLocaleString()}
-                    </Text>
-                    <Text style={styles.priceEst}>est.</Text>
+                    {priceAvailable ? (
+                      <>
+                        <Text style={[styles.priceTotal, isActive && { color: COLORS.red }]}>
+                          ₹{est.toLocaleString()}
+                        </Text>
+                        <Text style={styles.priceEst}>est.</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.priceUnavailable}>Unavailable</Text>
+                    )}
                     <View style={[styles.radio, isActive && styles.radioActive]}>
                       {isActive && <View style={styles.radioDot} />}
                     </View>
@@ -162,9 +169,9 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
         <View style={styles.noteBox}>
           <Text style={styles.noteIco}>ℹ️</Text>
           <Text style={styles.noteTxt}>
-            {calcFare(selected, dist, pricingList, AMB_RATES).base === 0
+            {selectedFare.available
               ? `Estimated fare uses slab pricing for ${dist.toFixed(1)} km. Final amount confirmed after booking.`
-              : `Estimated fare = base charge + ₹${r.km}/km × ${dist.toFixed(1)} km. Final amount confirmed after booking.`
+              : `Pricing unavailable for this vehicle type. Please choose another or check back later.`
             }
           </Text>
         </View>
@@ -176,9 +183,18 @@ export default function AmbulanceSelectScreen({ navigation, route }) {
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selected)?.name}</Text>
-          <Text style={styles.footerPrice}>₹{estTotal.toLocaleString()} est.</Text>
+          {estTotal != null ? (
+            <Text style={styles.footerPrice}>₹{estTotal.toLocaleString()} est.</Text>
+          ) : (
+            <Text style={styles.footerPriceUnavailable}>Pricing unavailable</Text>
+          )}
         </View>
-        <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={[styles.nextBtn, estTotal == null && styles.nextBtnDisabled]}
+          onPress={handleNext}
+          activeOpacity={estTotal != null ? 0.85 : 1}
+          disabled={estTotal == null}
+        >
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>
         </TouchableOpacity>
       </View>
@@ -253,6 +269,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(232,25,44,0.07)",
     borderColor: "rgba(232,25,44,0.45)",
   },
+  cardDisabled: { opacity: 0.45 },
   badge: {
     alignSelf: "flex-start",
     borderRadius: 6, borderWidth: 0.5,
@@ -278,6 +295,7 @@ const styles = StyleSheet.create({
   priceCol: { alignItems: "flex-end", gap: 4 },
   priceTotal: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
   priceEst: { color: COLORS.grayDim, fontSize: 10 },
+  priceUnavailable: { color: COLORS.grayDim, fontSize: 11, fontWeight: "700", fontStyle: "italic" },
   radio: {
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",
@@ -326,9 +344,11 @@ const styles = StyleSheet.create({
   footerLeft: { flex: 1 },
   footerLabel: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
   footerPrice: { color: COLORS.text, fontSize: 20, fontWeight: "800", marginTop: 2 },
+  footerPriceUnavailable: { color: COLORS.grayDim, fontSize: 14, fontWeight: "700", marginTop: 2, fontStyle: "italic" },
   nextBtn: {
     backgroundColor: COLORS.red,
     borderRadius: 12, paddingVertical: 14, paddingHorizontal: 20,
   },
+  nextBtnDisabled: { backgroundColor: "rgba(0,0,0,0.15)" },
   nextBtnTxt: { color: COLORS.white, fontSize: 14, fontWeight: "700" },
 });

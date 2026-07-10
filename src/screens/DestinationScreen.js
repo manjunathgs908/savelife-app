@@ -628,6 +628,10 @@ export default function DestinationScreen({ navigation, route }) {
 
     if (wasSettingFav) return;
 
+    // Dead-body transport has no Trip Type concept — keep jumping straight
+    // there. Every other flow now waits for the Trip Type step + explicit
+    // "Find Ambulance" tap (see handleFindAmbulance) instead of navigating
+    // the instant a destination is picked.
     if (route?.params?.flow === "deadbody") {
       navigation.navigate("DeadBodyTransport", {
         pickupCoord,
@@ -635,17 +639,7 @@ export default function DestinationScreen({ navigation, route }) {
         dropCoord: coord,
         dropLabel: label,
       });
-      return;
     }
-
-    navigation.navigate("AmbulanceList", {
-      pickupCoord,
-      pickupLabel,
-      dropCoord: coord,
-      dropLabel: label,
-      scheduleType,
-      scheduleDate: scheduleType === "later" && scheduleDate ? scheduleDate.toISOString() : null,
-    });
   }
 
   async function handleSelectPrediction(pred) {
@@ -796,13 +790,13 @@ export default function DestinationScreen({ navigation, route }) {
       return;
     }
 
-    navigation.navigate("AmbulanceSelect", {
+    navigation.navigate("AmbulanceList", {
+      pickupCoord,
       pickupLabel,
+      dropCoord: destCoord,
       dropLabel: destLabel,
-      dist: dist ?? 5,
-      duration: duration ?? 1200,
       scheduleType,
-      scheduleDate: scheduleType === "later" ? scheduleDate.toISOString() : null,
+      scheduleDate: scheduleType === "later" && scheduleDate ? scheduleDate.toISOString() : null,
       patientType,
       contactName,
       contactPhone,
@@ -944,7 +938,7 @@ export default function DestinationScreen({ navigation, route }) {
         </View>
 
         <TouchableOpacity style={s.nowBtn} onPress={openScheduleModal} activeOpacity={0.85}>
-          <Text style={s.nowBtnIco}>{scheduleType === "later" ? "🕐" : "🟢"}</Text>
+          <Text style={s.nowBtnIco}>🕐</Text>
           <Text style={s.nowBtnTxt} numberOfLines={1}>{scheduleBtnLabel}</Text>
         </TouchableOpacity>
       </View>
