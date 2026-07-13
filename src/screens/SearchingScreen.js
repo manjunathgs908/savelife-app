@@ -21,7 +21,6 @@ const ACTIVE_STEP_INDEX = 1; // "Finding Nearest Ambulance" — this screen's ow
 
 const TRACK_API = "https://api.savelife.health/api/trips";
 const POLL_INTERVAL_MS = 3000;
-const SLOW_THRESHOLD_MS = 60000;
 const DRIVER_ASSIGNED_STATUSES = ["dispatched", "en_route", "completed", "cancelled"];
 
 export default function SearchingScreen({ navigation, route }) {
@@ -32,7 +31,6 @@ export default function SearchingScreen({ navigation, route }) {
   const barAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
-  const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
     const barLoop = Animated.loop(
@@ -63,7 +61,6 @@ export default function SearchingScreen({ navigation, route }) {
     if (!tripId) return;
     let active = true;
     let pollHandle = null;
-    const startedAt = Date.now();
 
     const poll = async () => {
       try {
@@ -72,19 +69,13 @@ export default function SearchingScreen({ navigation, route }) {
           const data = await res.json();
           const trip = data.trip;
           const driverAssigned = !!trip?.driver || DRIVER_ASSIGNED_STATUSES.includes(trip?.status);
-          if (driverAssigned) {
-            if (active) {
-              clearInterval(pollHandle);
-              navigation.replace("Tracking", route.params);
-            }
-            return;
+          if (driverAssigned && active) {
+            clearInterval(pollHandle);
+            navigation.replace("Tracking", route.params);
           }
         }
       } catch (err) {
         // Silent — next poll retries automatically.
-      }
-      if (active && Date.now() - startedAt >= SLOW_THRESHOLD_MS) {
-        setIsSlow(true);
       }
     };
 
@@ -184,9 +175,7 @@ export default function SearchingScreen({ navigation, route }) {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
           <Text style={styles.title}>Finding the Nearest Ambulance</Text>
           <Text style={styles.subtitle}>
-            {isSlow
-              ? "This is taking longer than usual. You can keep waiting or cancel and try again."
-              : "We're locating the nearest available ambulance. This usually takes less than 30 seconds."}
+            We're locating the nearest available ambulance. This usually takes less than 30 seconds.
           </Text>
 
           <View
@@ -205,10 +194,13 @@ export default function SearchingScreen({ navigation, route }) {
             {TIMELINE_STEPS.map((step, i) => {
               const isDone = i < ACTIVE_STEP_INDEX;
               const isActive = i === ACTIVE_STEP_INDEX;
+              const isFirst = i === 0;
               const isLast = i === TIMELINE_STEPS.length - 1;
+              const prevDone = i - 1 < ACTIVE_STEP_INDEX;
               return (
-                <View key={step.key} style={styles.timelineRow}>
-                  <View style={styles.timelineIconCol}>
+                <View key={step.key} style={styles.timelineStep}>
+                  <View style={styles.timelineIconRow}>
+                    <View style={[styles.timelineConnectorH, isFirst && styles.timelineConnectorHidden, prevDone && !isFirst && styles.timelineConnectorDone]} />
                     <View style={styles.timelineIconWrap}>
                       {isActive && (
                         <Animated.View
@@ -226,9 +218,12 @@ export default function SearchingScreen({ navigation, route }) {
                         ) : null}
                       </View>
                     </View>
-                    {!isLast && <View style={[styles.timelineConnector, isDone && styles.timelineConnectorDone]} />}
+                    <View style={[styles.timelineConnectorH, isLast && styles.timelineConnectorHidden, isDone && !isLast && styles.timelineConnectorDone]} />
                   </View>
-                  <Text style={[styles.timelineLabel, (isDone || isActive) && styles.timelineLabelActive]}>
+                  <Text
+                    style={[styles.timelineLabel, (isDone || isActive) && styles.timelineLabelActive]}
+                    numberOfLines={2}
+                  >
                     {step.label}
                   </Text>
                 </View>
@@ -353,10 +348,10 @@ const styles = StyleSheet.create({
   },
   progressBar: { height: 4, borderRadius: 2, backgroundColor: COLORS.red },
 
-  // Timeline
-  timeline: { marginTop: 24 },
-  timelineRow: { flexDirection: "row", alignItems: "flex-start" },
-  timelineIconCol: { width: 26, alignItems: "center" },
+  // Timeline (horizontal stepper)
+  timeline: { flexDirection: "row", marginTop: 24 },
+  timelineStep: { flex: 1, alignItems: "center" },
+  timelineIconRow: { flexDirection: "row", alignItems: "center", width: "100%" },
   timelineIconWrap: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
   timelinePulseRing: {
     position: "absolute", width: 22, height: 22, borderRadius: 11,
@@ -371,14 +366,15 @@ const styles = StyleSheet.create({
   timelineIconActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
   timelineCheck: { color: COLORS.bg, fontSize: 11, fontWeight: "800" },
   timelineActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.bg },
-  timelineConnector: {
-    width: 2, minHeight: 16, flexGrow: 1,
-    backgroundColor: COLORS.border, marginVertical: 2,
+  timelineConnectorH: {
+    flex: 1, height: 2,
+    backgroundColor: COLORS.border,
   },
+  timelineConnectorHidden: { backgroundColor: "transparent" },
   timelineConnectorDone: { backgroundColor: COLORS.green },
   timelineLabel: {
-    flex: 1, color: COLORS.grayDim, fontSize: 13.5, fontWeight: "500",
-    marginLeft: 12, paddingBottom: 18, paddingTop: 1,
+    color: COLORS.grayDim, fontSize: 10.5, fontWeight: "500",
+    textAlign: "center", marginTop: 6, paddingHorizontal: 2,
   },
   timelineLabelActive: { color: COLORS.text, fontWeight: "700" },
 
