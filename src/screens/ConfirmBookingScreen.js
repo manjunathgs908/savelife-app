@@ -205,12 +205,12 @@ export default function ConfirmBookingScreen({ navigation, route }) {
         }),
       });
 
-      if (!response.ok) {
+     if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.message || `Request failed with status ${response.status}`);
       }
-
-      navigation.navigate("Searching", { service: selectedType });
+      const result = await response.json();
+      navigation.navigate("Searching", { service: selectedType, tripId: result.trip._id });
     } catch (error) {
       Alert.alert("Booking Failed", error.message || "Something went wrong. Please try again.");
     }
