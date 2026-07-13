@@ -19,14 +19,20 @@ const TIMELINE_STEPS = [
 ];
 const ACTIVE_STEP_INDEX = 1; // "Finding Nearest Ambulance" — this screen's own state
 
+const TRACK_API = "https://api.savelife.health/api/trips";
+const POLL_INTERVAL_MS = 3000;
+const SLOW_THRESHOLD_MS = 60000;
+const DRIVER_ASSIGNED_STATUSES = ["dispatched", "en_route", "completed", "cancelled"];
+
 export default function SearchingScreen({ navigation, route }) {
-  const { pickupCoord, pickupLabel, dropCoord, dropLabel, dist, fare, selectedAmb, service } = route.params || {};
+  const { tripId, pickupCoord, pickupLabel, dropCoord, dropLabel, dist, fare, selectedAmb, service } = route.params || {};
   const ambName = selectedAmb?.name || service;
 
   const mapRef = useRef(null);
   const barAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
+  const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
     const barLoop = Animated.loop(
@@ -49,9 +55,44 @@ export default function SearchingScreen({ navigation, route }) {
     );
     pulseLoop.start();
 
-    const t = setTimeout(() => navigation.replace("Tracking", route.params), 2500);
-    return () => { clearTimeout(t); barLoop.stop(); pulseLoop.stop(); };
+    return () => { barLoop.stop(); pulseLoop.stop(); };
   }, []);
+
+  // Poll the backend until a driver is actually assigned, then hand off to Tracking.
+  useEffect(() => {
+    if (!tripId) return;
+    let active = true;
+    let pollHandle = null;
+    const startedAt = Date.now();
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${TRACK_API}/${tripId}/track`);
+        if (res.ok) {
+          const data = await res.json();
+          const trip = data.trip;
+          const driverAssigned = !!trip?.driver || DRIVER_ASSIGNED_STATUSES.includes(trip?.status);
+          if (driverAssigned) {
+            if (active) {
+              clearInterval(pollHandle);
+              navigation.replace("Tracking", route.params);
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        // Silent — next poll retries automatically.
+      }
+      if (active && Date.now() - startedAt >= SLOW_THRESHOLD_MS) {
+        setIsSlow(true);
+      }
+    };
+
+    poll();
+    pollHandle = setInterval(poll, POLL_INTERVAL_MS);
+
+    return () => { active = false; clearInterval(pollHandle); };
+  }, [tripId]);
 
   useEffect(() => {
     if (!pickupCoord || !dropCoord) return;
@@ -143,7 +184,9 @@ export default function SearchingScreen({ navigation, route }) {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
           <Text style={styles.title}>Finding the Nearest Ambulance</Text>
           <Text style={styles.subtitle}>
-            We're locating the nearest available ambulance. This usually takes less than 30 seconds.
+            {isSlow
+              ? "This is taking longer than usual. You can keep waiting or cancel and try again."
+              : "We're locating the nearest available ambulance. This usually takes less than 30 seconds."}
           </Text>
 
           <View

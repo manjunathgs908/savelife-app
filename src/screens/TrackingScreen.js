@@ -82,7 +82,6 @@ export default function TrackingScreen({ navigation, route }) {
   }
 
   const statusInfo = STATUS_LABELS[tripInfo?.status] || STATUS_LABELS.booked;
-  const driverAssigned = !!tripInfo?.driver;
   const initials = tripInfo?.driver?.name
     ? tripInfo.driver.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
     : "??";
@@ -106,12 +105,6 @@ export default function TrackingScreen({ navigation, route }) {
 
         {loading ? (
           <Text style={styles.waitingTxt}>Loading trip details...</Text>
-        ) : !driverAssigned ? (
-          <View style={styles.waitingCard}>
-            <Text style={styles.waitingTxt}>
-              Nearest ambulance ge assign maaduttiddivi. Dayavittu kaayiri...
-            </Text>
-          </View>
         ) : (
           <View style={styles.driverCard}>
             <View style={styles.avatar}>
@@ -186,7 +179,6 @@ const styles = StyleSheet.create({
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   status: { color: COLORS.text, fontSize: 17, fontWeight: "700", marginBottom: 16 },
 
-  waitingCard: { backgroundColor: "#1a1a2e", borderRadius: 14, padding: 16, marginBottom: 16 },
   waitingTxt: { color: COLORS.grayDim, fontSize: 14, textAlign: "center" },
 
   driverCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#1a1a2e", borderRadius: 14, padding: 14, marginBottom: 16 },
