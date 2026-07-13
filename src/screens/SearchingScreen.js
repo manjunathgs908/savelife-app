@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Animated, Easing, Dimensions } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -11,7 +11,7 @@ const FALLBACK_REGION = {
 const COORD_DELTA = { latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
 export default function SearchingScreen({ navigation, route }) {
-  const { pickupCoord, pickupLabel, dropCoord, dropLabel } = route.params || {};
+  const { pickupCoord, pickupLabel, dropCoord, dropLabel, dist, fare } = route.params || {};
   const mapRef = useRef(null);
   const barAnim = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
@@ -83,6 +83,14 @@ export default function SearchingScreen({ navigation, route }) {
               </View>
             </Marker>
           )}
+          {pickupCoord && dropCoord && (
+            <Polyline
+              coordinates={[pickupCoord, dropCoord]}
+              strokeColor={COLORS.red}
+              strokeWidth={3}
+              lineDashPattern={[8, 8]}
+            />
+          )}
         </MapView>
       </View>
 
@@ -111,6 +119,13 @@ export default function SearchingScreen({ navigation, route }) {
               <Text style={styles.routeSummaryText} numberOfLines={1}>🏁 {dropLabel}</Text>
             ) : null}
           </View>
+        )}
+
+        {dist != null && fare != null && (
+          <>
+            <View style={styles.divider} />
+            <Text style={styles.fareRow}>{dist.toFixed(1)} km · ₹{fare.toLocaleString()}</Text>
+          </>
         )}
       </View>
     </View>
@@ -167,4 +182,7 @@ const styles = StyleSheet.create({
 
   routeSummary: { width: "100%", marginTop: 22, gap: 8 },
   routeSummaryText: { color: COLORS.grayDim, fontSize: 12.5, fontWeight: "500" },
+
+  divider: { width: "100%", height: 1, backgroundColor: COLORS.border, marginTop: 16 },
+  fareRow: { width: "100%", color: COLORS.text, fontSize: 13.5, fontWeight: "600", marginTop: 12 },
 });

@@ -214,7 +214,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
         service: selectedType,
         tripId: result.trip._id,
         pickupCoord, pickupLabel, dropCoord, dropLabel,
-        dist, duration,
+        dist, duration, fare: total,
       });
     } catch (error) {
       Alert.alert("Booking Failed", error.message || "Something went wrong. Please try again.");
