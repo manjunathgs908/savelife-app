@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, Platform, ActivityIndicator, Dimensions,
+  StyleSheet, Platform, ActivityIndicator, Dimensions, Alert,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
@@ -362,7 +362,8 @@ export default function HomeScreen({ navigation }) {
         {/* Live Tracking — BOTTOM-RIGHT */}
         <TouchableOpacity
           style={styles.liveBtn}
-          onPress={() => navigation.navigate("Tracking")}
+          // TODO: wire up to the new tracking screen once it's built — TrackingScreen.js was removed
+          onPress={() => Alert.alert("Live Tracking", "Live tracking is coming soon.")}
           activeOpacity={0.85}
         >
           <Text style={styles.liveIco}>🎯</Text>

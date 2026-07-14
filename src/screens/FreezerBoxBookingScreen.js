@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   ovCancelBtn: { marginTop: 28, paddingVertical: 14, paddingHorizontal: 40, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", borderRadius: 12 },
   ovCancelText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "600" },
 
-  // Cancellation reason modal — bottom sheet, same shape as TrackingScreen's cancel modal
+  // Cancellation reason modal — bottom sheet
   cancelModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   cancelModalSheet: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28, maxHeight: "85%" },
   cancelModalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.15)", alignSelf: "center", marginBottom: 14 },
