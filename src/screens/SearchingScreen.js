@@ -56,9 +56,7 @@ export default function SearchingScreen({ navigation, route }) {
     return () => { barLoop.stop(); pulseLoop.stop(); };
   }, []);
 
-  // Poll the backend until a driver is actually assigned.
-  // TODO: hand off to the new tracking screen once it's built — TrackingScreen.js
-  // was removed, so for now we just return to Main once a driver is assigned.
+  // Poll the backend until a driver is actually assigned, then hand off to Tracking.
   useEffect(() => {
     if (!tripId) return;
     let active = true;
@@ -73,7 +71,7 @@ export default function SearchingScreen({ navigation, route }) {
           const driverAssigned = !!trip?.driver || DRIVER_ASSIGNED_STATUSES.includes(trip?.status);
           if (driverAssigned && active) {
             clearInterval(pollHandle);
-            navigation.replace("Main");
+            navigation.replace("Tracking", route.params);
           }
         }
       } catch (err) {

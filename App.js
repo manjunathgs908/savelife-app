@@ -14,6 +14,7 @@ import MainTabs from "./src/screens/MainTabs";
 import SelectTypeScreen from "./src/screens/SelectTypeScreen";
 import BookingWizardScreen from "./src/screens/BookingWizardScreen";
 import SearchingScreen from "./src/screens/SearchingScreen";
+import TrackingScreen from "./src/screens/TrackingScreen";
 import EventAmbulanceScreen from "./src/screens/EventAmbulanceScreen";
 import FreezerBoxScreen from "./src/screens/FreezerBoxScreen";
 import FreezerBoxBookingScreen from "./src/screens/FreezerBoxBookingScreen";
@@ -86,7 +87,7 @@ export default function App() {
             <Stack.Screen name="SelectType" component={SelectTypeScreen} />
             <Stack.Screen name="Booking" component={BookingWizardScreen} />
             <Stack.Screen name="Searching" component={SearchingScreen} />
-            {/* TODO: register the new tracking screen here once it's built — TrackingScreen.js was removed */}
+            <Stack.Screen name="Tracking" component={TrackingScreen} />
             <Stack.Screen name="EventAmbulance" component={EventAmbulanceScreen} />
             <Stack.Screen name="FreezerBox" component={FreezerBoxScreen} />
             <Stack.Screen name="FreezerBoxBooking" component={FreezerBoxBookingScreen} />
