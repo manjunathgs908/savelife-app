@@ -11,15 +11,39 @@ const CANCEL_REASONS = [
   "Other",
 ];
 
-export default function TrackingScreen({ navigation }) {
+export default function TrackingScreen({ navigation, route }) {
+  const { tripId } = route.params || {};
   const [eta, setEta] = useState(7);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState(null);
+  const [trip, setTrip] = useState(null);
 
   useEffect(() => {
     const i = setInterval(() => setEta((e) => Math.max(0, e - 1)), 1500);
     return () => clearInterval(i);
   }, []);
+
+  // Poll the customer-facing trip status (driver/vehicle/addresses/OTP)
+  // until the trip moves past pickup — no live socket yet, so a short
+  // interval keeps the OTP + driver card reasonably fresh.
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+
+    async function loadStatus() {
+      try {
+        const res = await fetch(`https://api.savelife.health/api/trips/${tripId}/customer-status`);
+        const data = await res.json();
+        if (!cancelled && data.success) setTrip(data.trip);
+      } catch {
+        // Network error — keep showing the last known trip state
+      }
+    }
+
+    loadStatus();
+    const i = setInterval(loadStatus, 5000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, [tripId]);
 
   function openCancelModal() {
     setCancelReason(null);
@@ -60,13 +84,39 @@ export default function TrackingScreen({ navigation }) {
         <View style={styles.driverCard}>
           <View style={styles.avatar}><Text style={styles.avatarText}>RK</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.driverName}>Ravi Kumar</Text>
-            <Text style={styles.driverMeta}>BLS • KA-01-AB-1234</Text>
+            <Text style={styles.driverName}>{trip?.driverName || "Assigning driver…"}</Text>
+            <Text style={styles.driverMeta}>{trip?.vehicleNumber || "Vehicle details pending"}</Text>
             <Text style={styles.driverRate}>⭐ 4.9 (320 trips)</Text>
           </View>
           <TouchableOpacity style={styles.callBtn}><Text style={{ fontSize: 16 }}>📞</Text></TouchableOpacity>
           <TouchableOpacity style={styles.chatBtn}><Text style={{ fontSize: 16 }}>💬</Text></TouchableOpacity>
         </View>
+
+        {trip?.pickupOtp && (
+          <View style={styles.otpCard}>
+            <Text style={styles.otpLabel}>PICKUP OTP</Text>
+            <Text style={styles.otpDigits}>{trip.pickupOtp}</Text>
+            <Text style={styles.otpHint}>Share this OTP with your driver to start the trip</Text>
+          </View>
+        )}
+
+        {(trip?.pickupAddress || trip?.dropAddress) && (
+          <View style={styles.addressCard}>
+            {trip?.pickupAddress && (
+              <View style={styles.addressRow}>
+                <Text style={styles.addressDot}>●</Text>
+                <Text style={styles.addressText} numberOfLines={2}>{trip.pickupAddress}</Text>
+              </View>
+            )}
+            {trip?.dropAddress && (
+              <View style={styles.addressRow}>
+                <Text style={[styles.addressDot, { color: COLORS.red }]}>●</Text>
+                <Text style={styles.addressText} numberOfLines={2}>{trip.dropAddress}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         <TouchableOpacity style={styles.cancel} onPress={openCancelModal}>
           <Text style={styles.cancelText}>Cancel Booking</Text>
         </TouchableOpacity>
@@ -152,6 +202,17 @@ const styles = StyleSheet.create({
   driverRate: { color: COLORS.gray, fontSize: 11, marginTop: 2 },
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
   chatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.08)", alignItems: "center", justifyContent: "center" },
+
+  otpCard: { backgroundColor: "rgba(232,25,44,0.06)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(232,25,44,0.25)", padding: 14, alignItems: "center", marginBottom: 12 },
+  otpLabel: { color: COLORS.red, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  otpDigits: { color: COLORS.text, fontSize: 32, fontWeight: "900", letterSpacing: 8, marginTop: 4 },
+  otpHint: { color: COLORS.grayDim, fontSize: 11.5, marginTop: 6, textAlign: "center" },
+
+  addressCard: { backgroundColor: "rgba(0,0,0,0.03)", borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 13, marginBottom: 12, gap: 8 },
+  addressRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  addressDot: { color: COLORS.grayDim, fontSize: 10, marginTop: 3 },
+  addressText: { color: COLORS.text, fontSize: 12.5, flex: 1 },
+
   cancel: { marginTop: "auto", paddingVertical: 13, borderWidth: 1, borderColor: "rgba(0,0,0,0.15)", borderRadius: 12, alignItems: "center" },
   cancelText: { color: COLORS.gray, fontSize: 13 },
 

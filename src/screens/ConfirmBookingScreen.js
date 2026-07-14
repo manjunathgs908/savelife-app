@@ -210,7 +210,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
         throw new Error(errData.message || `Request failed with status ${response.status}`);
       }
 
-      navigation.navigate("Searching", { service: selectedType });
+      const { trip } = await response.json();
+      navigation.navigate("Searching", { service: selectedType, tripId: trip._id });
     } catch (error) {
       Alert.alert("Booking Failed", error.message || "Something went wrong. Please try again.");
     }
