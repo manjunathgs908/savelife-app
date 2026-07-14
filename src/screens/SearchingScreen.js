@@ -10,12 +10,19 @@ const FALLBACK_REGION = {
 };
 const COORD_DELTA = { latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
+// Hides Google's default POI markers (malls, business icons, lock icons, transit
+// stops) so only roads + our own pickup/destination markers show on the map.
+const MAP_STYLE = [
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
+
 const TIMELINE_STEPS = [
-  { key: "confirmed", label: "Booking Confirmed" },
-  { key: "finding", label: "Finding Nearest Ambulance" },
-  { key: "contacting", label: "Contacting Driver" },
-  { key: "assigned", label: "Ambulance Assigned" },
-  { key: "tracking", label: "Live Tracking" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "finding", label: "Finding" },
+  { key: "contacting", label: "Contacting" },
+  { key: "assigned", label: "Assigned" },
+  { key: "tracking", label: "Tracking" },
 ];
 const ACTIVE_STEP_INDEX = 1; // "Finding Nearest Ambulance" — this screen's own state
 
@@ -30,7 +37,17 @@ export default function SearchingScreen({ navigation, route }) {
   const mapRef = useRef(null);
   const barAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const sheetAnim = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    Animated.timing(sheetAnim, {
+      toValue: 1,
+      duration: 450,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useEffect(() => {
     const barLoop = Animated.loop(
@@ -110,8 +127,10 @@ export default function SearchingScreen({ navigation, route }) {
 
   const markerPulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] });
   const markerPulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
-  const stepPulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
-  const stepPulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0] });
+  const stepPulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] });
+  const stepPulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
+  const sheetOpacity = sheetAnim;
+  const sheetTranslateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
 
   function handleCancel() {
     navigation.navigate("Main");
@@ -129,6 +148,7 @@ export default function SearchingScreen({ navigation, route }) {
           provider={PROVIDER_GOOGLE}
           style={styles.map}
           initialRegion={initialRegion}
+          customMapStyle={MAP_STYLE}
           scrollEnabled={false}
           zoomEnabled={false}
           rotateEnabled={false}
@@ -169,7 +189,7 @@ export default function SearchingScreen({ navigation, route }) {
         </MapView>
       </View>
 
-      <View style={styles.sheet}>
+      <Animated.View style={[styles.sheet, { opacity: sheetOpacity, transform: [{ translateY: sheetTranslateY }] }]}>
         <View style={styles.sheetHandle} />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
@@ -257,7 +277,9 @@ export default function SearchingScreen({ navigation, route }) {
                   <Text style={styles.detailIcon}>🚑</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Ambulance Type</Text>
-                    <Text style={styles.detailValue}>{ambName}</Text>
+                    <View style={styles.ambBadge}>
+                      <Text style={styles.ambBadgeText}>{ambName}</Text>
+                    </View>
                   </View>
                 </View>
               )}
@@ -286,7 +308,7 @@ export default function SearchingScreen({ navigation, route }) {
         <TouchableOpacity onPress={handleSupport} activeOpacity={0.7}>
           <Text style={styles.supportLink}>Need Help? Contact Support</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -373,7 +395,7 @@ const styles = StyleSheet.create({
   timelineConnectorHidden: { backgroundColor: "transparent" },
   timelineConnectorDone: { backgroundColor: COLORS.green },
   timelineLabel: {
-    color: COLORS.grayDim, fontSize: 10.5, fontWeight: "500",
+    color: COLORS.grayDim, fontSize: 10, fontWeight: "500",
     textAlign: "center", marginTop: 6, paddingHorizontal: 2,
   },
   timelineLabelActive: { color: COLORS.text, fontWeight: "700" },
@@ -389,8 +411,14 @@ const styles = StyleSheet.create({
   detailLabel: { color: COLORS.grayDim, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, marginBottom: 2 },
   detailValue: { color: COLORS.text, fontSize: 13.5, fontWeight: "600", lineHeight: 18 },
 
-  divider: { width: "100%", height: 1, backgroundColor: COLORS.border, marginTop: 2, marginBottom: 12 },
-  fareRow: { color: COLORS.text, fontSize: 13.5, fontWeight: "700" },
+  ambBadge: {
+    backgroundColor: "rgba(232,25,44,0.12)", borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 3, alignSelf: "flex-start",
+  },
+  ambBadgeText: { color: COLORS.red, fontSize: 12.5, fontWeight: "700" },
+
+  divider: { width: "100%", height: 1, backgroundColor: COLORS.border, marginTop: 4, marginBottom: 12 },
+  fareRow: { color: COLORS.text, fontSize: 18, fontWeight: "800" },
 
   // Info banner
   infoBanner: {
