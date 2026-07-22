@@ -1,11 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking, Share, ActivityIndicator, Alert } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 
 const TRACK_API = "https://api.savelife.health/api/trips";
 const POLL_INTERVAL_MS = 5000;
 const COORD_DELTA = { latitudeDelta: 0.05, longitudeDelta: 0.05 };
+
+// TEMPORARY — no real support/helpline number exists anywhere in this
+// app today (ProfileScreen's "Help & Support" row has no handler either;
+// SearchingScreen's equivalent button just shows an Alert). Falls back
+// to the same Alert-based stub until a real number is wired in.
+const HELPLINE_PHONE = null;
+
+// Ambulance model has no explicit paramedic/crew field — derived
+// heuristically from service type (matches utils/ambulanceServiceTypes.js
+// on the backend). ALS/ACLS/NICU imply a paramedic/medical attendant on
+// board; BLS/body-shifting types don't.
+const PARAMEDIC_TYPES = ["ALS_TEMPO", "ACLS_TEMPO", "NICU_TEMPO", "ALS", "ACLS", "NICU"];
 
 const STATUS_LABELS = {
   booked    : "Booking Confirmed",
@@ -31,6 +43,8 @@ export default function TrackingScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelReason, setCancelReason] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
   const intervalRef = useRef(null);
 
   // Poll the customer tracking endpoint every 5 seconds — status, driver,
@@ -66,17 +80,64 @@ export default function TrackingScreen({ navigation, route }) {
 
   function openCancelModal() {
     setCancelReason(null);
+    setCancelError(null);
     setCancelModalVisible(true);
   }
 
   function closeCancelModal() {
+    if (cancelling) return; // don't let the backdrop/✕ dismiss mid-request
     setCancelModalVisible(false);
   }
 
-  function handleConfirmCancel() {
-    if (!cancelReason) return;
-    setCancelModalVisible(false);
-    navigation.navigate("Main");
+  async function handleConfirmCancel() {
+    if (!cancelReason || cancelling) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await fetch(`${TRACK_API}/${tripId}/customer-cancel`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setCancelError(data.message || "Could not cancel your trip. Please try again.");
+        return;
+      }
+      setCancelModalVisible(false);
+      navigation.navigate("Main");
+    } catch (err) {
+      setCancelError("Network error — please check your connection and try again.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  function callHelpline() {
+    if (HELPLINE_PHONE) {
+      Linking.openURL(`tel:${HELPLINE_PHONE}`);
+    } else {
+      Alert.alert("Need Help?", "Our support team is here for you — reach out anytime from Profile > Help & Support.");
+    }
+  }
+
+  async function shareTrip() {
+    if (!trip) return;
+    const veh = trip.vehicle;
+    const vehicleLine = veh ? `${veh.registrationNumber}${veh.type ? ` · ${veh.type}` : ""}` : "";
+    try {
+      await Share.share({
+        message:
+          `🚑 Tracking a SaveLife ambulance${trip.driver?.name ? ` driven by ${trip.driver.name}` : ""}.\n` +
+          (vehicleLine ? `Vehicle: ${vehicleLine}\n` : "") +
+          `Pickup: ${trip.pickup?.address || "—"}\n` +
+          `Drop: ${trip.dropAddress || "—"}\n` +
+          `Live status: ${STATUS_LABELS[trip.status] || trip.status}\n` +
+          `savelife://track/${tripId}`,
+      });
+    } catch (err) {
+      // Silent — Share.share rejecting just means the user dismissed the sheet.
+    }
   }
 
   // No tripId at all (e.g. screen opened directly) — show a safe empty
@@ -99,6 +160,13 @@ export default function TrackingScreen({ navigation, route }) {
     ? trip.driver.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const showCancel = trip?.status !== "completed" && trip?.status !== "cancelled";
+  const isParamedicVehicle = trip?.vehicle?.type && PARAMEDIC_TYPES.includes(trip.vehicle.type);
+  const vehicleLabel = trip?.vehicle
+    ? [trip.vehicle.typeLabel || trip.vehicle.type, trip.vehicle.model].filter(Boolean).join(" · ")
+    : null;
+  const ratingLabel = trip?.driver?.ratingCount > 0
+    ? `★ ${trip.driver.ratingAvg} (${trip.driver.completedTripsCount} trips)`
+    : trip?.driver ? "New driver" : null;
 
   const mapRegion = pickupCoord
     ? { latitude: pickupCoord.latitude, longitude: pickupCoord.longitude, ...COORD_DELTA }
@@ -125,13 +193,21 @@ export default function TrackingScreen({ navigation, route }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate("Main")}>
           <Text style={styles.backBtnTxt}>←</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.shareBtn} onPress={shareTrip}>
+          <Text style={styles.backBtnTxt}>↗</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── Bottom card — fixed portion of the screen, own internal scroll ── */}
       <View style={styles.card}>
         <View style={styles.handle} />
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-          <Text style={styles.statusTxt}>{statusLabel}</Text>
+          <Text style={[styles.statusTxt, trip?.etaMinutes == null && styles.statusTxtNoEta]}>{statusLabel}</Text>
+          {trip?.etaMinutes != null && (
+            <Text style={styles.etaTxt}>
+              🕐 ~{trip.etaMinutes} min away{trip.distanceToPickupKm != null ? ` · ${trip.distanceToPickupKm} km` : ""}
+            </Text>
+          )}
 
           {loading ? (
             <Text style={styles.loadingTxt}>Loading trip details…</Text>
@@ -141,8 +217,17 @@ export default function TrackingScreen({ navigation, route }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.driverName}>{trip?.driver?.name || "Assigning driver…"}</Text>
                 <Text style={styles.driverMeta}>
-                  {trip?.vehicle ? `${trip.vehicle.type} • ${trip.vehicle.registrationNumber}` : "Vehicle details pending"}
+                  {vehicleLabel
+                    ? `${vehicleLabel} • ${trip.vehicle.registrationNumber}`
+                    : trip?.vehicle
+                      ? `${trip.vehicle.type} • ${trip.vehicle.registrationNumber}`
+                      : "Vehicle details pending"}
                 </Text>
+                {(ratingLabel || isParamedicVehicle) && (
+                  <Text style={styles.driverSubMeta}>
+                    {[ratingLabel, isParamedicVehicle && "🩺 Paramedic on board"].filter(Boolean).join("  ·  ")}
+                  </Text>
+                )}
               </View>
               {trip?.driver?.phone && (
                 <TouchableOpacity style={styles.callBtn} onPress={callDriver}>
@@ -160,28 +245,59 @@ export default function TrackingScreen({ navigation, route }) {
             </View>
           )}
 
-          {(trip?.pickupAddress || trip?.dropAddress) && (
+          {(trip?.pickup?.address || trip?.dropAddress) && (
             <View style={styles.addressCard}>
-              {trip?.pickupAddress && (
+              {trip?.pickup?.address && (
                 <View style={styles.addressRow}>
-                  <Text style={styles.addressDot}>●</Text>
-                  <Text style={styles.addressText} numberOfLines={2}>{trip.pickupAddress}</Text>
+                  <View style={styles.timelineDotCol}>
+                    <Text style={styles.addressDot}>●</Text>
+                    <View style={styles.timelineLine} />
+                  </View>
+                  <Text style={styles.addressText} numberOfLines={2}>{trip.pickup.address}</Text>
                 </View>
               )}
               {trip?.dropAddress && (
                 <View style={styles.addressRow}>
-                  <Text style={[styles.addressDot, { color: COLORS.red }]}>●</Text>
+                  <View style={styles.timelineDotCol}>
+                    <Text style={[styles.addressDot, { color: COLORS.red }]}>●</Text>
+                  </View>
                   <Text style={styles.addressText} numberOfLines={2}>{trip.dropAddress}</Text>
                 </View>
               )}
             </View>
           )}
 
-          {showCancel && (
-            <TouchableOpacity style={styles.cancelBtn} onPress={openCancelModal}>
-              <Text style={styles.cancelBtnTxt}>Cancel Booking</Text>
-            </TouchableOpacity>
+          {(trip?.estimatedDistanceKm != null || trip?.estimatedFare != null) && (
+            <View style={styles.summaryRow}>
+              {trip.estimatedDistanceKm != null && (
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryValue}>{trip.estimatedDistanceKm} km</Text>
+                  <Text style={styles.summaryLabel}>Distance</Text>
+                </View>
+              )}
+              {trip.estimatedFare != null && (
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryValue}>₹{trip.estimatedFare}</Text>
+                  <Text style={styles.summaryLabel}>Est. Fare</Text>
+                </View>
+              )}
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{trip.paymentPreference === "cash" ? "Cash" : trip.paymentPreference === "upi" ? "UPI" : "Card"}</Text>
+                <Text style={styles.summaryLabel}>Payment</Text>
+              </View>
+            </View>
           )}
+
+          <View style={styles.rowButtons}>
+            <TouchableOpacity style={styles.helplineBtn} onPress={callHelpline}>
+              <Text style={styles.helplineBtnTxt}>☎️ Helpline</Text>
+            </TouchableOpacity>
+            {showCancel && (
+              <TouchableOpacity style={[styles.cancelBtn, { flex: 1 }]} onPress={openCancelModal}>
+                <Text style={styles.cancelBtnTxt}>Cancel Booking</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </ScrollView>
       </View>
 
@@ -222,15 +338,19 @@ export default function TrackingScreen({ navigation, route }) {
               );
             })}
 
-            <TouchableOpacity style={styles.goBackBtn} onPress={closeCancelModal} activeOpacity={0.75}>
+            {cancelError && <Text style={styles.cancelErrorTxt}>{cancelError}</Text>}
+
+            <TouchableOpacity style={styles.goBackBtn} onPress={closeCancelModal} activeOpacity={0.75} disabled={cancelling}>
               <Text style={styles.goBackText}>Go Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.confirmCancelBtn, !cancelReason && { opacity: 0.4 }]}
-              disabled={!cancelReason}
+              style={[styles.confirmCancelBtn, (!cancelReason || cancelling) && { opacity: 0.4 }]}
+              disabled={!cancelReason || cancelling}
               onPress={handleConfirmCancel}
             >
-              <Text style={styles.confirmCancelText}>Cancel Booking</Text>
+              {cancelling
+                ? <ActivityIndicator color={COLORS.white} />
+                : <Text style={styles.confirmCancelText}>Cancel Booking</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -250,6 +370,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
   },
   backBtnTxt: { color: COLORS.white, fontSize: 17 },
+  shareBtn: {
+    position: "absolute", top: 50, right: 18,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+  },
 
   card: {
     maxHeight: "52%",
@@ -260,7 +385,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 16, elevation: 12,
   },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: "center", marginBottom: 14 },
-  statusTxt: { color: COLORS.text, fontSize: 16, fontWeight: "700", marginBottom: 14 },
+  statusTxt: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
+  etaTxt: { color: COLORS.green, fontSize: 12.5, fontWeight: "600", marginTop: 3, marginBottom: 11 },
+  statusTxtNoEta: { marginBottom: 14 },
 
   loadingTxt: { color: COLORS.grayDim, fontSize: 13, marginBottom: 12 },
 
@@ -273,6 +400,7 @@ const styles = StyleSheet.create({
   avatarTxt: { color: COLORS.white, fontWeight: "700" },
   driverName: { color: COLORS.text, fontWeight: "700", fontSize: 14 },
   driverMeta: { color: COLORS.grayDim, fontSize: 11.5, marginTop: 2 },
+  driverSubMeta: { color: COLORS.green, fontSize: 11, marginTop: 3, fontWeight: "600" },
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
 
   otpCard: {
@@ -290,10 +418,23 @@ const styles = StyleSheet.create({
     padding: 13, marginBottom: 12, gap: 8,
   },
   addressRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  addressDot: { color: COLORS.grayDim, fontSize: 10, marginTop: 3 },
+  timelineDotCol: { alignItems: "center", width: 10 },
+  timelineLine: { width: 1, flex: 1, minHeight: 14, backgroundColor: COLORS.border, marginTop: 3 },
+  addressDot: { color: COLORS.grayDim, fontSize: 10 },
   addressText: { color: COLORS.text, fontSize: 12.5, flex: 1 },
 
-  cancelBtn: { paddingVertical: 13, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: "center", marginTop: 4 },
+  summaryRow: {
+    flexDirection: "row", backgroundColor: COLORS.bg2, borderRadius: 14,
+    borderWidth: 1, borderColor: COLORS.border, padding: 13, marginBottom: 12,
+  },
+  summaryItem: { flex: 1, alignItems: "center" },
+  summaryValue: { color: COLORS.text, fontWeight: "700", fontSize: 13.5 },
+  summaryLabel: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 2 },
+
+  rowButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
+  helplineBtn: { paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: "center" },
+  helplineBtnTxt: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
+  cancelBtn: { paddingVertical: 13, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: "center" },
   cancelBtnTxt: { color: COLORS.gray, fontSize: 13 },
 
   emptyContainer: { flex: 1, backgroundColor: COLORS.bg, alignItems: "center", justifyContent: "center", padding: 24 },
@@ -324,6 +465,7 @@ const styles = StyleSheet.create({
   radioActive: { borderColor: COLORS.red },
   radioDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: COLORS.red },
 
+  cancelErrorTxt: { color: COLORS.red, fontSize: 12.5, textAlign: "center", marginTop: 6 },
   goBackBtn: { paddingVertical: 14, alignItems: "center", marginTop: 4 },
   goBackText: { color: COLORS.grayDim, fontSize: 14, fontWeight: "600" },
   confirmCancelBtn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center", marginTop: 4 },
