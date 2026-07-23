@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking, Share, ActivityIndicator, Alert } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Clipboard from "expo-clipboard";
 import { COLORS } from "../theme";
 import { getRouteInfo, haversineDistanceKm } from "../utils/routeUtils";
 
@@ -56,6 +57,8 @@ export default function TrackingScreen({ navigation, route }) {
   const [routeCoords, setRouteCoords] = useState([]);
   const intervalRef = useRef(null);
   const lastRouteOriginRef = useRef(null);
+  const mapRef = useRef(null);
+  const [currentRegion, setCurrentRegion] = useState(null);
 
   // Poll the customer tracking endpoint every 5 seconds — status, driver,
   // vehicle, addresses, and pickupOtp all come from this one response.
@@ -108,6 +111,19 @@ export default function TrackingScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [driverLat, driverLng, trip?.pickupVerified]);
 
+  // Pickup -> drop trip duration for the summary card. Addresses are fixed
+  // for the life of the trip, so this only needs to run once (not on the
+  // 5s poll) — reuses the same cached Directions helper as the driver route.
+  const [tripDurationMin, setTripDurationMin] = useState(null);
+  useEffect(() => {
+    if (!pickupCoord || !dropCoord) return;
+    let cancelled = false;
+    getRouteInfo(pickupCoord, dropCoord).then(result => {
+      if (!cancelled) setTripDurationMin(Math.round(result.duration / 60));
+    });
+    return () => { cancelled = true; };
+  }, [pickupCoord, dropCoord]);
+
   function callDriver() {
     if (trip?.driver?.phone) Linking.openURL(`tel:${trip.driver.phone}`);
   }
@@ -145,6 +161,40 @@ export default function TrackingScreen({ navigation, route }) {
     } finally {
       setCancelling(false);
     }
+  }
+
+  function zoomBy(factor) {
+    const base = currentRegion || mapRegion;
+    if (!base || !mapRef.current) return;
+    mapRef.current.animateToRegion({
+      ...base,
+      latitudeDelta: Math.max(0.002, base.latitudeDelta * factor),
+      longitudeDelta: Math.max(0.002, base.longitudeDelta * factor),
+    }, 200);
+  }
+
+  function recenterMap() {
+    if (!mapRef.current) return;
+    const target = driverLat != null && driverLng != null
+      ? { latitude: driverLat, longitude: driverLng, ...COORD_DELTA }
+      : mapRegion;
+    if (target) mapRef.current.animateToRegion(target, 300);
+  }
+
+  function messageDriver() {
+    Alert.alert("Message Driver", "In-app chat isn't available yet — please call your driver directly.");
+  }
+
+  const [regCopied, setRegCopied] = useState(false);
+  async function copyRegNumber() {
+    if (!trip?.vehicle?.registrationNumber) return;
+    await Clipboard.setStringAsync(trip.vehicle.registrationNumber);
+    setRegCopied(true);
+    setTimeout(() => setRegCopied(false), 1500);
+  }
+
+  function editDropLocation() {
+    Alert.alert("Edit Drop Location", "Changing the drop location after booking isn't available yet — please contact support.");
   }
 
   function callHelpline() {
@@ -199,8 +249,20 @@ export default function TrackingScreen({ navigation, route }) {
     ? [trip.vehicle.typeLabel || trip.vehicle.type, trip.vehicle.model].filter(Boolean).join(" · ")
     : null;
   const ratingLabel = trip?.driver?.ratingCount > 0
-    ? `★ ${trip.driver.ratingAvg} (${trip.driver.completedTripsCount} trips)`
+    ? `★ ${trip.driver.ratingAvg} · ${trip.driver.completedTripsCount} trips`
     : trip?.driver ? "New driver" : null;
+  const vehicleBadge = trip?.vehicle?.type ? trip.vehicle.type.replace(/_TEMPO$/i, "").toUpperCase() : null;
+  const dropParts = trip?.dropAddress ? trip.dropAddress.split(",") : null;
+  const dropTitle = dropParts ? dropParts[0].trim() : null;
+  const dropSub = dropParts && dropParts.length > 1 ? dropParts.slice(1).join(",").trim() : null;
+  const pickupParts = trip?.pickup?.address ? trip.pickup.address.split(",") : null;
+  const pickupTitle = pickupParts ? pickupParts[0].trim() : null;
+  const pickupSub = pickupParts && pickupParts.length > 1 ? pickupParts.slice(1).join(",").trim() : null;
+  const headerSub = trip?.status === "completed"
+    ? "Trip completed"
+    : trip?.status === "cancelled"
+      ? "This trip was cancelled"
+      : "Your ambulance is arriving soon";
 
   const mapRegion = pickupCoord
     ? { latitude: pickupCoord.latitude, longitude: pickupCoord.longitude, ...COORD_DELTA }
@@ -212,25 +274,66 @@ export default function TrackingScreen({ navigation, route }) {
       <View style={styles.mapWrap}>
         {mapRegion ? (
           <MapView
+            ref={mapRef}
             provider={PROVIDER_GOOGLE}
             style={StyleSheet.absoluteFillObject}
             initialRegion={mapRegion}
+            onRegionChangeComplete={setCurrentRegion}
           >
-            <Marker coordinate={pickupCoord} title="Pickup" pinColor={COLORS.green} />
-            {dropCoord && <Marker coordinate={dropCoord} title="Drop" pinColor={COLORS.gray} />}
+            <Marker coordinate={pickupCoord} anchor={{ x: 0.5, y: 1 }}>
+              <View style={styles.pinWrap}>
+                <View style={[styles.pinTag, { backgroundColor: COLORS.green }]}>
+                  <Text style={styles.pinTagTxt}>Pickup</Text>
+                </View>
+                <Text style={[styles.pinGlyph, { color: COLORS.green }]}>📍</Text>
+              </View>
+              {pickupTitle && (
+                <View style={styles.pinCallout}>
+                  <Text style={styles.pinCalloutTitle} numberOfLines={1}>{pickupTitle}</Text>
+                  {pickupSub && <Text style={styles.pinCalloutSub} numberOfLines={1}>{pickupSub}</Text>}
+                </View>
+              )}
+            </Marker>
+            {dropCoord && (
+              <Marker coordinate={dropCoord} anchor={{ x: 0.5, y: 1 }}>
+                <View style={styles.pinWrap}>
+                  <View style={[styles.pinTag, { backgroundColor: COLORS.red }]}>
+                    <Text style={styles.pinTagTxt}>Drop</Text>
+                  </View>
+                  <Text style={[styles.pinGlyph, { color: COLORS.red }]}>📍</Text>
+                </View>
+                {dropTitle && (
+                  <View style={styles.pinCallout}>
+                    <Text style={styles.pinCalloutTitle} numberOfLines={1}>{dropTitle}</Text>
+                    {dropSub && <Text style={styles.pinCalloutSub} numberOfLines={1}>{dropSub}</Text>}
+                  </View>
+                )}
+              </Marker>
+            )}
             {driverLat != null && driverLng != null && (
               <Marker
                 coordinate={{ latitude: driverLat, longitude: driverLng }}
                 title={trip?.driver?.name || "Ambulance"}
                 anchor={{ x: 0.5, y: 0.5 }}
               >
+                {trip?.etaMinutes != null && (
+                  <View style={styles.etaCallout}>
+                    <Text style={{ fontSize: 15 }}>🚑</Text>
+                    <View style={{ marginLeft: 6 }}>
+                      <Text style={styles.etaCalloutMin} numberOfLines={1}>{trip.etaMinutes} min away</Text>
+                      {trip.distanceToPickupKm != null && (
+                        <Text style={styles.etaCalloutDist} numberOfLines={1}>{Number(trip.distanceToPickupKm).toFixed(1)} km</Text>
+                      )}
+                    </View>
+                  </View>
+                )}
                 <View style={styles.ambulanceMarker}>
                   <Text style={{ fontSize: 18 }}>🚑</Text>
                 </View>
               </Marker>
             )}
             {routeCoords.length > 0 && (
-              <Polyline coordinates={routeCoords} strokeColor={COLORS.red} strokeWidth={3} />
+              <Polyline coordinates={routeCoords} strokeColor={COLORS.teal} strokeWidth={4} />
             )}
           </MapView>
         ) : (
@@ -238,25 +341,40 @@ export default function TrackingScreen({ navigation, route }) {
             <Text style={{ fontSize: 40 }}>🚑</Text>
           </View>
         )}
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate("Main")}>
-          <Text style={styles.backBtnTxt}>←</Text>
+
+        <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.navigate("Main")}>
+          <Text style={styles.circleBtnTxt}>‹</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.shareBtn} onPress={shareTrip}>
-          <Text style={styles.backBtnTxt}>↗</Text>
+
+        <View style={styles.statusCard}>
+          <View style={styles.statusDot} />
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={styles.statusCardTitle} numberOfLines={1}>{statusLabel}</Text>
+            <Text style={styles.statusCardSub} numberOfLines={1}>{headerSub}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={[styles.circleBtn, styles.circleBtnRight]} onPress={shareTrip}>
+          <Text style={{ fontSize: 15 }}>🛡️</Text>
         </TouchableOpacity>
+
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(0.5)}>
+            <Text style={styles.zoomBtnTxt}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(2)}>
+            <Text style={styles.zoomBtnTxt}>−</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={recenterMap}>
+            <Text style={{ fontSize: 15 }}>🎯</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Bottom card — fixed portion of the screen, own internal scroll ── */}
       <View style={styles.card}>
         <View style={styles.handle} />
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-          <Text style={[styles.statusTxt, trip?.etaMinutes == null && styles.statusTxtNoEta]}>{statusLabel}</Text>
-          {trip?.etaMinutes != null && (
-            <Text style={styles.etaTxt}>
-              🕐 ~{trip.etaMinutes} min away{trip.distanceToPickupKm != null ? ` · ${trip.distanceToPickupKm} km` : ""}
-            </Text>
-          )}
-
           {loading ? (
             <Text style={styles.loadingTxt}>Loading trip details…</Text>
           ) : (
@@ -264,88 +382,143 @@ export default function TrackingScreen({ navigation, route }) {
               <View style={styles.avatar}><Text style={styles.avatarTxt}>{initials}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.driverName}>{trip?.driver?.name || "Assigning driver…"}</Text>
-                <Text style={styles.driverMeta}>
-                  {vehicleLabel
-                    ? `${vehicleLabel} • ${trip.vehicle.registrationNumber}`
-                    : trip?.vehicle
-                      ? `${trip.vehicle.type} • ${trip.vehicle.registrationNumber}`
-                      : "Vehicle details pending"}
-                </Text>
                 {(ratingLabel || isParamedicVehicle) && (
                   <Text style={styles.driverSubMeta}>
                     {[ratingLabel, isParamedicVehicle && "🩺 Paramedic on board"].filter(Boolean).join("  ·  ")}
                   </Text>
                 )}
               </View>
-              {trip?.driver?.phone && (
-                <TouchableOpacity style={styles.callBtn} onPress={callDriver}>
-                  <Text style={{ fontSize: 16 }}>📞</Text>
+              <Text style={styles.driverVehicleGlyph}>🚑</Text>
+            </View>
+          )}
+
+          {trip?.vehicle && (
+            <View style={styles.chipRow}>
+              <View style={styles.chip}>
+                <Text style={{ fontSize: 13 }}>🚐</Text>
+                <Text style={styles.chipTxt} numberOfLines={1}>{vehicleLabel || trip.vehicle.type}</Text>
+              </View>
+              {vehicleBadge && (
+                <View style={styles.chip}>
+                  <Text style={{ fontSize: 13 }}>❤️</Text>
+                  <Text style={styles.chipTxt}>{vehicleBadge}</Text>
+                </View>
+              )}
+              {trip.vehicle.registrationNumber && (
+                <TouchableOpacity style={styles.chip} onPress={copyRegNumber}>
+                  <Text style={styles.chipRegTxt}>{trip.vehicle.registrationNumber}</Text>
+                  <Text style={{ fontSize: 12 }}>{regCopied ? "✅" : "📋"}</Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
 
-          {trip?.pickupOtp && (
-            <View style={styles.otpCard}>
-              <Text style={styles.otpLabel}>PICKUP OTP</Text>
-              <Text style={styles.otpDigits}>{trip.pickupOtp}</Text>
-              <Text style={styles.otpHint}>Share this OTP with your driver</Text>
-            </View>
-          )}
+          <View style={styles.rowButtons}>
+            {trip?.driver?.phone && (
+              <TouchableOpacity style={[styles.outlineActionBtn, { flex: 1 }]} onPress={callDriver}>
+                <Text style={{ fontSize: 15 }}>📞</Text>
+                <Text style={styles.outlineActionBtnTxt}>Call Driver</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.outlineActionBtn, { flex: 1 }]} onPress={messageDriver}>
+              <Text style={{ fontSize: 15 }}>💬</Text>
+              <Text style={styles.outlineActionBtnTxt}>Message Driver</Text>
+            </TouchableOpacity>
+          </View>
 
-          {(trip?.pickup?.address || trip?.dropAddress) && (
-            <View style={styles.addressCard}>
-              {trip?.pickup?.address && (
-                <View style={styles.addressRow}>
-                  <View style={styles.timelineDotCol}>
-                    <Text style={styles.addressDot}>●</Text>
-                    <View style={styles.timelineLine} />
-                  </View>
-                  <Text style={styles.addressText} numberOfLines={2}>{trip.pickup.address}</Text>
+          <View style={styles.sideBySideRow}>
+            {trip?.pickupOtp && (
+              <View style={[styles.otpCard, { flex: 1 }]}>
+                <View style={styles.otpHeaderRow}>
+                  <Text style={{ fontSize: 13 }}>🛡️</Text>
+                  <Text style={styles.otpLabel}>PICKUP OTP</Text>
                 </View>
-              )}
-              {trip?.dropAddress && (
-                <View style={styles.addressRow}>
-                  <View style={styles.timelineDotCol}>
-                    <Text style={[styles.addressDot, { color: COLORS.red }]}>●</Text>
-                  </View>
-                  <Text style={styles.addressText} numberOfLines={2}>{trip.dropAddress}</Text>
+                <Text style={styles.otpHint}>Share this OTP with driver at pickup</Text>
+                <View style={styles.otpDigitsRow}>
+                  {String(trip.pickupOtp).split("").map((d, i) => (
+                    <View key={i} style={styles.otpDigitBox}><Text style={styles.otpDigitTxt}>{d}</Text></View>
+                  ))}
                 </View>
-              )}
-            </View>
-          )}
+              </View>
+            )}
+            {dropTitle && (
+              <View style={[styles.dropCard, { flex: 1 }]}>
+                <View style={styles.dropHeaderRow}>
+                  <Text style={styles.dropLabel}>DROP LOCATION</Text>
+                  <TouchableOpacity onPress={editDropLocation} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.dropEditTxt}>✎ Edit</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.dropRow}>
+                  <Text style={{ fontSize: 13 }}>📍</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dropTitle} numberOfLines={1}>{dropTitle}</Text>
+                    {dropSub && <Text style={styles.dropSub} numberOfLines={2}>{dropSub}</Text>}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
 
           {(trip?.estimatedDistanceKm != null || trip?.estimatedFare != null) && (
-            <View style={styles.summaryRow}>
-              {trip.estimatedDistanceKm != null && (
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryValue}>{trip.estimatedDistanceKm} km</Text>
-                  <Text style={styles.summaryLabel}>Distance</Text>
-                </View>
-              )}
-              {trip.estimatedFare != null && (
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryValue}>₹{trip.estimatedFare}</Text>
-                  <Text style={styles.summaryLabel}>Est. Fare</Text>
-                </View>
-              )}
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{trip.paymentPreference === "cash" ? "Cash" : trip.paymentPreference === "upi" ? "UPI" : "Card"}</Text>
-                <Text style={styles.summaryLabel}>Payment</Text>
+            <>
+              <Text style={styles.summaryHeading}>TRIP SUMMARY</Text>
+              <View style={styles.summaryGrid}>
+                {trip.estimatedDistanceKm != null && (
+                  <View style={styles.summaryCell}>
+                    <Text style={styles.summaryIcon}>📏</Text>
+                    <Text style={styles.summaryValue}>{Number(trip.estimatedDistanceKm).toFixed(1)} km</Text>
+                    <Text style={styles.summaryLabel}>Distance</Text>
+                  </View>
+                )}
+                {tripDurationMin != null && (
+                  <View style={styles.summaryCell}>
+                    <Text style={styles.summaryIcon}>⏱️</Text>
+                    <Text style={styles.summaryValue}>{tripDurationMin} min</Text>
+                    <Text style={styles.summaryLabel}>Duration</Text>
+                  </View>
+                )}
+                {trip.estimatedFare != null && (
+                  <>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryIcon}>🏷️</Text>
+                      <Text style={styles.summaryValue}>₹{trip.estimatedFare}</Text>
+                      <Text style={styles.summaryLabel}>Fare</Text>
+                    </View>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryIcon}>💳</Text>
+                      <Text style={styles.summaryValue}>₹{trip.estimatedFare}</Text>
+                      <Text style={styles.summaryLabel}>Total</Text>
+                    </View>
+                  </>
+                )}
               </View>
-            </View>
+            </>
           )}
 
           <View style={styles.rowButtons}>
-            <TouchableOpacity style={styles.helplineBtn} onPress={callHelpline}>
-              <Text style={styles.helplineBtnTxt}>☎️ Helpline</Text>
-            </TouchableOpacity>
             {showCancel && (
-              <TouchableOpacity style={[styles.cancelBtn, { flex: 1 }]} onPress={openCancelModal}>
-                <Text style={styles.cancelBtnTxt}>Cancel Booking</Text>
+              <TouchableOpacity style={[styles.redOutlineBtn, { flex: 1 }]} onPress={openCancelModal}>
+                <Text style={{ fontSize: 15 }}>⊗</Text>
+                <Text style={styles.redOutlineBtnTxt}>Cancel Booking</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={[styles.shareBtn, { flex: 1 }]} onPress={shareTrip}>
+              <Text style={{ fontSize: 14 }}>🔗</Text>
+              <Text style={styles.shareBtnTxt}>Share Trip</Text>
+            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity style={styles.helpBanner} onPress={callHelpline} activeOpacity={0.85}>
+            <View style={styles.helpBannerIconWrap}>
+              <Text style={{ fontSize: 16 }}>🎧</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.helpBannerTitle}>Need Help? 24×7 Emergency Helpline</Text>
+              <Text style={styles.helpBannerSub}>We're here for you anytime.</Text>
+            </View>
+            <Text style={{ fontSize: 18, color: COLORS.white }}>›</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -412,21 +585,58 @@ const styles = StyleSheet.create({
 
   mapWrap: { flex: 1, backgroundColor: "#0a0d14" },
   mapPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center" },
-  backBtn: {
+
+  circleBtn: {
     position: "absolute", top: 50, left: 18,
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+    width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.white,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
   },
-  backBtnTxt: { color: COLORS.white, fontSize: 17 },
-  shareBtn: {
-    position: "absolute", top: 50, right: 18,
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+  circleBtnRight: { left: undefined, right: 18 },
+  circleBtnTxt: { color: COLORS.text, fontSize: 24, fontWeight: "600", marginTop: -2 },
+
+  statusCard: {
+    position: "absolute", top: 50, left: 68, right: 68,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: COLORS.white, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
   },
+  statusDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: COLORS.teal },
+  statusCardTitle: { color: COLORS.teal, fontSize: 14, fontWeight: "700" },
+  statusCardSub: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 1 },
+
+  pinWrap: { alignItems: "center" },
+  pinTag: { borderRadius: 8, paddingVertical: 3, paddingHorizontal: 8, marginBottom: 2 },
+  pinTagTxt: { color: COLORS.white, fontSize: 10, fontWeight: "800" },
+  pinGlyph: { fontSize: 26 },
+  pinCallout: {
+    position: "absolute", top: -46, alignSelf: "center", minWidth: 140,
+    backgroundColor: COLORS.white, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
+  pinCalloutTitle: { color: COLORS.text, fontWeight: "700", fontSize: 12 },
+  pinCalloutSub: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 1 },
+
+  etaCallout: {
+    position: "absolute", bottom: 40, alignSelf: "center", flexDirection: "row", alignItems: "center",
+    backgroundColor: COLORS.white, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, minWidth: 130,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
+  etaCalloutMin: { color: COLORS.teal, fontSize: 13, fontWeight: "800" },
+  etaCalloutDist: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 1 },
+
+  zoomControls: { position: "absolute", bottom: 16, right: 18, gap: 10 },
+  zoomBtn: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.white,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4,
+  },
+  zoomBtnTxt: { color: COLORS.text, fontSize: 18, fontWeight: "700" },
+
   ambulanceMarker: {
     width: 34, height: 34, borderRadius: 17,
     backgroundColor: COLORS.white, alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: COLORS.red,
+    borderWidth: 2, borderColor: COLORS.teal,
     shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
   },
 
@@ -439,63 +649,106 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 16, elevation: 12,
   },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: "center", marginBottom: 14 },
-  statusTxt: { color: COLORS.text, fontSize: 16, fontWeight: "700" },
-  etaTxt: { color: COLORS.green, fontSize: 12.5, fontWeight: "600", marginTop: 3, marginBottom: 11 },
-  statusTxtNoEta: { marginBottom: 14 },
 
   loadingTxt: { color: COLORS.grayDim, fontSize: 13, marginBottom: 12 },
 
   driverRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: COLORS.bg2, borderRadius: 14, padding: 13,
-    borderWidth: 1, borderColor: COLORS.border, marginBottom: 12,
+    marginBottom: 14,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
+  avatar: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.teal,
+    alignItems: "center", justifyContent: "center",
+  },
   avatarTxt: { color: COLORS.white, fontWeight: "700" },
-  driverName: { color: COLORS.text, fontWeight: "700", fontSize: 14 },
-  driverMeta: { color: COLORS.grayDim, fontSize: 11.5, marginTop: 2 },
-  driverSubMeta: { color: COLORS.green, fontSize: 11, marginTop: 3, fontWeight: "600" },
-  callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.red, alignItems: "center", justifyContent: "center" },
+  driverName: { color: COLORS.text, fontWeight: "700", fontSize: 16 },
+  driverSubMeta: { color: COLORS.grayDim, fontSize: 12, marginTop: 3, fontWeight: "600" },
+  driverVehicleGlyph: { fontSize: 34 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  chip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: COLORS.bg2, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingVertical: 8, paddingHorizontal: 11,
+  },
+  chipTxt: { color: COLORS.text, fontSize: 12, fontWeight: "600" },
+  chipRegTxt: { color: COLORS.teal, fontSize: 12, fontWeight: "700" },
+
+  redOutlineBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderWidth: 1.5, borderColor: COLORS.red, borderRadius: 12, paddingVertical: 14,
+    backgroundColor: COLORS.white,
+  },
+  redOutlineBtnTxt: { color: COLORS.red, fontWeight: "700", fontSize: 13.5 },
+  outlineActionBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderWidth: 1.5, borderColor: COLORS.teal, borderRadius: 12, paddingVertical: 14,
+    backgroundColor: COLORS.white,
+  },
+  outlineActionBtnTxt: { color: COLORS.teal, fontWeight: "700", fontSize: 13.5 },
+
+  sideBySideRow: { flexDirection: "row", gap: 10, marginBottom: 12, alignItems: "stretch" },
 
   otpCard: {
-    backgroundColor: "rgba(232,25,44,0.06)", borderRadius: 14,
-    borderWidth: 1, borderColor: "rgba(232,25,44,0.25)",
-    padding: 14, alignItems: "center", marginBottom: 12,
+    backgroundColor: COLORS.tealTint, borderRadius: 14,
+    borderWidth: 1, borderColor: "rgba(20,184,166,0.3)",
+    padding: 13,
   },
-  otpLabel: { color: COLORS.red, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  otpDigits: { color: COLORS.text, fontSize: 32, fontWeight: "900", letterSpacing: 8, marginTop: 4 },
-  otpHint: { color: COLORS.grayDim, fontSize: 11.5, marginTop: 6, textAlign: "center" },
+  otpHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  otpLabel: { color: COLORS.teal, fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5 },
+  otpHint: { color: COLORS.grayDim, fontSize: 10, marginTop: 4 },
+  otpDigitsRow: { flexDirection: "row", gap: 6, marginTop: 10, justifyContent: "center" },
+  otpDigitBox: {
+    width: 32, height: 38, borderRadius: 8, borderWidth: 1, borderColor: "rgba(20,184,166,0.35)",
+    backgroundColor: COLORS.white, alignItems: "center", justifyContent: "center",
+  },
+  otpDigitTxt: { color: COLORS.teal, fontSize: 17, fontWeight: "800" },
 
-  addressCard: {
+  dropCard: {
     backgroundColor: COLORS.bg2, borderRadius: 14,
     borderWidth: 1, borderColor: COLORS.border,
-    padding: 13, marginBottom: 12, gap: 8,
+    padding: 13,
   },
-  addressRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  timelineDotCol: { alignItems: "center", width: 10 },
-  timelineLine: { width: 1, flex: 1, minHeight: 14, backgroundColor: COLORS.border, marginTop: 3 },
-  addressDot: { color: COLORS.grayDim, fontSize: 10 },
-  addressText: { color: COLORS.text, fontSize: 12.5, flex: 1 },
+  dropHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  dropLabel: { color: COLORS.teal, fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5 },
+  dropEditTxt: { color: COLORS.teal, fontSize: 11, fontWeight: "700" },
+  dropRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10 },
+  dropTitle: { color: COLORS.text, fontWeight: "700", fontSize: 12.5 },
+  dropSub: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 2 },
 
-  summaryRow: {
-    flexDirection: "row", backgroundColor: COLORS.bg2, borderRadius: 14,
-    borderWidth: 1, borderColor: COLORS.border, padding: 13, marginBottom: 12,
+  summaryHeading: { color: COLORS.grayDim, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 8 },
+  summaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 14 },
+  summaryCell: {
+    width: "47%", backgroundColor: COLORS.bg2, borderRadius: 14,
+    borderWidth: 1, borderColor: COLORS.border, padding: 13, alignItems: "flex-start",
   },
-  summaryItem: { flex: 1, alignItems: "center" },
-  summaryValue: { color: COLORS.text, fontWeight: "700", fontSize: 13.5 },
+  summaryIcon: { fontSize: 15, marginBottom: 6 },
+  summaryValue: { color: COLORS.text, fontWeight: "700", fontSize: 15 },
   summaryLabel: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 2 },
 
-  rowButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
-  helplineBtn: { paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: "center" },
-  helplineBtnTxt: { color: COLORS.gray, fontSize: 13, fontWeight: "600" },
-  cancelBtn: { paddingVertical: 13, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: "center" },
-  cancelBtnTxt: { color: COLORS.gray, fontSize: 13 },
+  rowButtons: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 12 },
+  shareBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 14, borderRadius: 12, backgroundColor: COLORS.teal,
+  },
+  shareBtnTxt: { color: COLORS.white, fontSize: 13.5, fontWeight: "700" },
+
+  helpBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: COLORS.teal, borderRadius: 16, padding: 14,
+  },
+  helpBannerIconWrap: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  helpBannerTitle: { color: COLORS.white, fontWeight: "700", fontSize: 13.5 },
+  helpBannerSub: { color: "rgba(255,255,255,0.75)", fontSize: 11.5, marginTop: 2 },
 
   emptyContainer: { flex: 1, backgroundColor: COLORS.bg, alignItems: "center", justifyContent: "center", padding: 24 },
   emptyEmoji: { fontSize: 42, marginBottom: 12 },
   emptyTitle: { color: COLORS.text, fontSize: 17, fontWeight: "700" },
   emptySub: { color: COLORS.grayDim, fontSize: 13, marginTop: 6, textAlign: "center" },
-  emptyBtn: { marginTop: 20, backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 28 },
+  emptyBtn: { marginTop: 20, backgroundColor: COLORS.teal, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 28 },
   emptyBtnTxt: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },

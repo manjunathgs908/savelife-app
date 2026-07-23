@@ -11,6 +11,8 @@ export const COLORS = {
   grayDim: "#9CA3AF",
   border: "#E5E7EB",
   green: "#22c55e",
+  teal: "#14B8A6",
+  tealTint: "#e6f7f4",
 };
 export const LANGUAGES = ["EN", "KN", "HI", "TE", "TA", "ML"];
 export const t = (lang, en, kn, hi, te, ta, ml) =>
