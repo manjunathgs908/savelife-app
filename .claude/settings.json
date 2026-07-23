@@ -58,7 +58,8 @@
       "Bash(claude mcp *)",
       "PowerShell(Get-Command claude -ErrorAction SilentlyContinue)",
       "Bash(xargs grep -l \"Driver On The Way\\\\|PICKUP OTP\")",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(npm uninstall *)"
     ]
   }
 }

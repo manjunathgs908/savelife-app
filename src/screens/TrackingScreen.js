@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking, Share, ActivityIndicator, Alert } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
-import * as Clipboard from "expo-clipboard";
 import { COLORS } from "../theme";
 import { getRouteInfo, haversineDistanceKm } from "../utils/routeUtils";
 
@@ -183,14 +182,6 @@ export default function TrackingScreen({ navigation, route }) {
 
   function messageDriver() {
     Alert.alert("Message Driver", "In-app chat isn't available yet — please call your driver directly.");
-  }
-
-  const [regCopied, setRegCopied] = useState(false);
-  async function copyRegNumber() {
-    if (!trip?.vehicle?.registrationNumber) return;
-    await Clipboard.setStringAsync(trip.vehicle.registrationNumber);
-    setRegCopied(true);
-    setTimeout(() => setRegCopied(false), 1500);
   }
 
   function editDropLocation() {
@@ -405,10 +396,9 @@ export default function TrackingScreen({ navigation, route }) {
                 </View>
               )}
               {trip.vehicle.registrationNumber && (
-                <TouchableOpacity style={styles.chip} onPress={copyRegNumber}>
+                <View style={styles.chip}>
                   <Text style={styles.chipRegTxt}>{trip.vehicle.registrationNumber}</Text>
-                  <Text style={{ fontSize: 12 }}>{regCopied ? "✅" : "📋"}</Text>
-                </TouchableOpacity>
+                </View>
               )}
             </View>
           )}
