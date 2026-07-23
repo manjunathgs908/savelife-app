@@ -192,6 +192,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pickupLabel,
+          pickupLat: pickupCoord?.latitude,
+          pickupLng: pickupCoord?.longitude,
           dropLabel,
           dist,
           effectiveDist,

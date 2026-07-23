@@ -1,7 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking, Share, ActivityIndicator, Alert } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
+import { getRouteInfo, haversineDistanceKm } from "../utils/routeUtils";
+
+// Only refetch the ambulance -> pickup route once the driver has moved
+// this far from where the last route was computed — the driver's GPS
+// pings every ~10s and moves only a little each time, so refetching a
+// real Directions route on every 5s poll would burn quota for no visual
+// benefit. 300m keeps the line visually accurate without hammering the API.
+const ROUTE_REFETCH_KM = 0.3;
 
 const TRACK_API = "https://api.savelife.health/api/trips";
 const POLL_INTERVAL_MS = 5000;
@@ -45,7 +53,9 @@ export default function TrackingScreen({ navigation, route }) {
   const [cancelReason, setCancelReason] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
   const intervalRef = useRef(null);
+  const lastRouteOriginRef = useRef(null);
 
   // Poll the customer tracking endpoint every 5 seconds — status, driver,
   // vehicle, addresses, and pickupOtp all come from this one response.
@@ -73,6 +83,30 @@ export default function TrackingScreen({ navigation, route }) {
     intervalRef.current = setInterval(fetchTrip, POLL_INTERVAL_MS);
     return () => clearInterval(intervalRef.current);
   }, [tripId]);
+
+  // Ambulance -> pickup route line. Only meaningful pre-pickup (matches
+  // trackTrip's own distanceToPickupKm/etaMinutes gating) — there's no
+  // drop-side coordinate anywhere to route toward post-pickup. Throttled
+  // to avoid a Directions API call on every 5s poll (see ROUTE_REFETCH_KM).
+  const driverLat = trip?.driverLocation?.lat;
+  const driverLng = trip?.driverLocation?.lng;
+  useEffect(() => {
+    if (driverLat == null || driverLng == null || !pickupCoord || trip?.pickupVerified) {
+      if (trip?.pickupVerified) setRouteCoords([]); // clear the stale line once picked up
+      return;
+    }
+
+    const driverPoint = { latitude: driverLat, longitude: driverLng };
+    const last = lastRouteOriginRef.current;
+    if (last && haversineDistanceKm(last, driverPoint) < ROUTE_REFETCH_KM) return;
+
+    lastRouteOriginRef.current = driverPoint;
+    let cancelled = false;
+    getRouteInfo(driverPoint, pickupCoord).then(result => {
+      if (!cancelled) setRouteCoords(result.coords);
+    });
+    return () => { cancelled = true; };
+  }, [driverLat, driverLng, trip?.pickupVerified]);
 
   function callDriver() {
     if (trip?.driver?.phone) Linking.openURL(`tel:${trip.driver.phone}`);
@@ -182,8 +216,22 @@ export default function TrackingScreen({ navigation, route }) {
             style={StyleSheet.absoluteFillObject}
             initialRegion={mapRegion}
           >
-            <Marker coordinate={pickupCoord} title="Pickup" pinColor={COLORS.red} />
+            <Marker coordinate={pickupCoord} title="Pickup" pinColor={COLORS.green} />
             {dropCoord && <Marker coordinate={dropCoord} title="Drop" pinColor={COLORS.gray} />}
+            {driverLat != null && driverLng != null && (
+              <Marker
+                coordinate={{ latitude: driverLat, longitude: driverLng }}
+                title={trip?.driver?.name || "Ambulance"}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <View style={styles.ambulanceMarker}>
+                  <Text style={{ fontSize: 18 }}>🚑</Text>
+                </View>
+              </Marker>
+            )}
+            {routeCoords.length > 0 && (
+              <Polyline coordinates={routeCoords} strokeColor={COLORS.red} strokeWidth={3} />
+            )}
           </MapView>
         ) : (
           <View style={styles.mapPlaceholder}>
@@ -374,6 +422,12 @@ const styles = StyleSheet.create({
     position: "absolute", top: 50, right: 18,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+  },
+  ambulanceMarker: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: COLORS.white, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: COLORS.red,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
   },
 
   card: {
