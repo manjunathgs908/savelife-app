@@ -19,14 +19,20 @@ Project root on my machine: `C:\Users\Dell\Downloads\savelife-app`
 1. **NO HARDCODED PRICES.** All fares, slabs, wait-charge rates, and add-on prices come
    from the backend `Pricing` collection (MongoDB). If you find a rate literal in code,
    flag it — do not add another.
-2. **Server is the source of truth for time and money.** Never compute wait charges,
-   final fares, or trip timestamps on the device.
+2. **Server is the source of truth for time and money.** Never compute *or display* a
+   wait charge, final fare, or trip timestamp that was calculated on the device — every
+   rupee amount shown must come straight from a server response field (e.g.
+   `waitState.accruedAmount`), never interpolated or ticked up locally.
 3. **Emergency flow must stay fast.** No new modals, tooltips, onboarding carousels,
    or extra taps in the emergency path.
 4. **No new dependencies** without asking me first — native modules force a full EAS
    rebuild (OTA won't ship them).
 5. **Don't touch backend code from this repo.** If a change needs an API change,
    tell me what endpoint is needed and stop.
+6. **This repo only — never read or edit files outside `savelife-app`.** Not
+   `medifleet-backend`, not the other related repos listed above. If you need a
+   backend contract, endpoint shape, or field name, ask me — don't go inspect
+   another repo's code to find out.
 
 ---
 
@@ -101,6 +107,14 @@ swiping from recents is not enough). Native module changes always need a full re
 - Wait-charge feature: driver-side "Reached Pickup" + wait-time tracking.
   Customer app side = show the **same live wait timer** the driver sees,
   driven by server state. Do not accumulate the timer on the device.
+
+### Wait-charge backend contract (confirmed — don't guess at this)
+- `PUT /api/trips/:id/arrive-pickup` — body `{ lat, lng }` optional
+- `PUT /api/trips/:id/reached-hospital` — body `{ lat, lng }`, requires `pickupVerified`
+- `PUT /api/trips/:id/start-return` — no body, round-trip only, requires `reachedHospitalAt`
+- All three are idempotent.
+- Trip fields: `tripType` (`'one_way' | 'round_trip'`), `arrivedAtPickupAt`,
+  `reachedHospitalAt`, `returnStartedAt`, `pickupVerified`.
 
 ## Known issues
 - Google Maps API key is exposed in `routeUtils.js` and `FreezerBoxScreen.js`.
