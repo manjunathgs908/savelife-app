@@ -57,6 +57,7 @@ export default function TrackingScreen({ navigation, route }) {
   const intervalRef = useRef(null);
   const lastRouteOriginRef = useRef(null);
   const mapRef = useRef(null);
+  const waitStateSyncedAtRef = useRef(Date.now());
   const [currentRegion, setCurrentRegion] = useState(null);
 
   // Poll the customer tracking endpoint every 5 seconds — status, driver,
@@ -72,7 +73,10 @@ export default function TrackingScreen({ navigation, route }) {
         const res = await fetch(`${TRACK_API}/${tripId}/track`);
         if (res.ok) {
           const data = await res.json();
-          if (data.success) setTrip(data.trip);
+          if (data.success) {
+            setTrip(data.trip);
+            waitStateSyncedAtRef.current = Date.now();
+          }
         }
       } catch (err) {
         // Silent — next poll retries automatically.
@@ -122,6 +126,33 @@ export default function TrackingScreen({ navigation, route }) {
     });
     return () => { cancelled = true; };
   }, [pickupCoord, dropCoord]);
+
+  // Wait-charge timer (Blueprint §5.5) — the free-time countdown ticks
+  // locally every second purely so the digits move smoothly between 5s
+  // polls. The rupee figure is never derived from that tick: it's always
+  // whatever waitState.accruedAmount the server last sent, same as what
+  // the driver app shows. Server is the source of truth for money.
+  const waitState = trip?.waitState;
+  const [, forceWaitTick] = useState(0);
+  useEffect(() => {
+    if (!waitState?.activeSegmentType) return;
+    const id = setInterval(() => forceWaitTick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [waitState?.activeSegmentType]);
+
+  let waitTimerLabel = null;
+  let waitChargeLabel = null;
+  if (waitState?.activeSegmentType) {
+    const secsSincePoll = Math.floor((Date.now() - waitStateSyncedAtRef.current) / 1000);
+    const displayFreeRemaining = Math.max(0, (waitState.freeSecondsRemaining || 0) - secsSincePoll);
+    if (displayFreeRemaining > 0) {
+      const mm = String(Math.floor(displayFreeRemaining / 60)).padStart(2, "0");
+      const ss = String(displayFreeRemaining % 60).padStart(2, "0");
+      waitTimerLabel = `Free waiting time left ${mm}:${ss}`;
+    } else {
+      waitChargeLabel = `Waiting charge ₹${waitState.accruedAmount}`;
+    }
+  }
 
   function callDriver() {
     if (trip?.driver?.phone) Linking.openURL(`tel:${trip.driver.phone}`);
@@ -403,6 +434,20 @@ export default function TrackingScreen({ navigation, route }) {
             </View>
           )}
 
+          {waitState?.activeSegmentType && (
+            <View style={[styles.waitCard, waitChargeLabel ? styles.waitCardCharging : styles.waitCardFree]}>
+              <Text style={{ fontSize: 15 }}>⏱️</Text>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={[styles.waitCardTitle, waitChargeLabel && styles.waitCardTitleCharging]}>
+                  {waitTimerLabel || waitChargeLabel}
+                </Text>
+                {waitChargeLabel && (
+                  <Text style={styles.waitCardSub}>₹{waitState.ratePerMin}/min</Text>
+                )}
+              </View>
+            </View>
+          )}
+
           <View style={styles.rowButtons}>
             {trip?.driver?.phone && (
               <TouchableOpacity style={[styles.outlineActionBtn, { flex: 1 }]} onPress={callDriver}>
@@ -663,6 +708,16 @@ const styles = StyleSheet.create({
   },
   chipTxt: { color: COLORS.text, fontSize: 12, fontWeight: "600" },
   chipRegTxt: { color: COLORS.teal, fontSize: 12, fontWeight: "700" },
+
+  waitCard: {
+    flexDirection: "row", alignItems: "center",
+    borderRadius: 14, borderWidth: 1, padding: 13, marginBottom: 12,
+  },
+  waitCardFree: { backgroundColor: COLORS.tealTint, borderColor: "rgba(20,184,166,0.3)" },
+  waitCardCharging: { backgroundColor: "rgba(232,25,44,0.08)", borderColor: "rgba(232,25,44,0.3)" },
+  waitCardTitle: { color: COLORS.teal, fontWeight: "800", fontSize: 14 },
+  waitCardTitleCharging: { color: COLORS.red },
+  waitCardSub: { color: COLORS.grayDim, fontSize: 11, marginTop: 2, fontWeight: "600" },
 
   redOutlineBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
