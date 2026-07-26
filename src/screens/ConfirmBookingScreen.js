@@ -165,6 +165,14 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   const amb = selectedAmb || { icon: "🚑", name: "Ambulance", desc: "" };
 
+  // MONEY RULE: `dist` arrives from the previous screen (AmbulanceListScreen /
+  // DeadBodyTransportScreen), which now only forwards it once verified via a
+  // real Google Directions call — never a straight-line/placeholder estimate.
+  // distVerified is defense-in-depth: if this screen is ever reached with no
+  // verified distance (dist is null), fare is unavailable and booking is
+  // blocked here too, not just upstream.
+  const distVerified = dist != null;
+
   // Uses effectiveDist (doubled / drop→return-adjusted for round trips) —
   // NOT the raw one-way `dist`, which stays fixed and is only used for
   // display in the Trip Route card and as the reported one-way leg distance.
@@ -173,18 +181,25 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   // active doc with slabs exists for this vehicle type, `available` is
   // false and NOTHING is guessed. The fare section renders an unavailable
   // state and Confirm Booking is disabled until a real doc exists.
-  const { total: baseFareTotal, available: fareAvailable } = calcFare(selectedType, effectiveDist, pricingList);
+  const { total: baseFareTotal, available: fareAvailable } = distVerified
+    ? calcFare(selectedType, effectiveDist, pricingList)
+    : { total: null, available: false };
 
   // AC price: only offer the add-on if the Pricing doc actually defines
-  // acPerKm — no flat guessed price when it doesn't.
+  // acPerKm — no flat guessed price when it doesn't, and never when the
+  // distance itself isn't verified (would otherwise show ₹0).
   const pricingDoc = pricingList.find(p => p.serviceType?.toLowerCase() === selectedType && p.active !== false);
-  const acAvailable = !!pricingDoc?.acPerKm;
+  const acAvailable = distVerified && !!pricingDoc?.acPerKm;
   const acPrice = acAvailable ? Math.round(pricingDoc.acPerKm * effectiveDist) : null;
   const effectiveAcEnabled = acEnabled && acAvailable;
 
   const total = fareAvailable ? baseFareTotal + (effectiveAcEnabled ? acPrice : 0) : null;
 
   async function handleConfirm() {
+    if (!distVerified) {
+      Alert.alert("Couldn't verify route distance", "Please go back and try again.");
+      return;
+    }
     if (!fareAvailable) return; // safety net — button is disabled for this case too
     try {
       const response = await fetch("https://api.savelife.health/api/trips", {
@@ -195,6 +210,8 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           pickupLat: pickupCoord?.latitude,
           pickupLng: pickupCoord?.longitude,
           dropLabel,
+          dropLat: dropCoord?.latitude,
+          dropLng: dropCoord?.longitude,
           dist,
           effectiveDist,
           duration,
@@ -252,8 +269,15 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Pricing unavailable notice */}
-        {!fareAvailable && (
+        {/* Pricing / distance unavailable notice */}
+        {!distVerified ? (
+          <View style={styles.unavailableBox}>
+            <Text style={styles.unavailableIco}>⚠️</Text>
+            <Text style={styles.unavailableTxt}>
+              Couldn't verify the route distance. Please go back and try again — booking can't be confirmed without it.
+            </Text>
+          </View>
+        ) : !fareAvailable && (
           <View style={styles.unavailableBox}>
             <Text style={styles.unavailableIco}>⚠️</Text>
             <Text style={styles.unavailableTxt}>
@@ -269,7 +293,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <Text style={styles.cardTitle}>Trip Route</Text>
             <View style={styles.distBadge}>
               <Text style={styles.distBadgeTxt}>
-                {dist.toFixed(1)} km · ~{Math.round(duration / 60)} min
+                {distVerified ? `${dist.toFixed(1)} km · ~${Math.round(duration / 60)} min` : "Distance unavailable"}
               </Text>
             </View>
           </View>

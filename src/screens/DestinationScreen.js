@@ -565,7 +565,7 @@ export default function DestinationScreen({ navigation, route }) {
 
     getRouteInfo(pickupCoord, destCoord)
       .then(route => {
-        if (!active) return;
+        if (!active || !route) return;
         setDist(route.distance);
         setDuration(route.duration);
       })

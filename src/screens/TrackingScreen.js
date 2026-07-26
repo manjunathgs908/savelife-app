@@ -108,8 +108,10 @@ export default function TrackingScreen({ navigation, route }) {
 
     lastRouteOriginRef.current = driverPoint;
     let cancelled = false;
+    // Display-only ETA polyline, no fare involved — just skip the update
+    // if the Directions call fails rather than crashing on a null result.
     getRouteInfo(driverPoint, pickupCoord).then(result => {
-      if (!cancelled) setRouteCoords(result.coords);
+      if (!cancelled && result) setRouteCoords(result.coords);
     });
     return () => { cancelled = true; };
   }, [driverLat, driverLng, trip?.pickupVerified]);
@@ -121,8 +123,10 @@ export default function TrackingScreen({ navigation, route }) {
   useEffect(() => {
     if (!pickupCoord || !dropCoord) return;
     let cancelled = false;
+    // Display-only duration estimate, no fare involved — just skip the
+    // update if the Directions call fails rather than crashing on null.
     getRouteInfo(pickupCoord, dropCoord).then(result => {
-      if (!cancelled) setTripDurationMin(Math.round(result.duration / 60));
+      if (!cancelled && result) setTripDurationMin(Math.round(result.duration / 60));
     });
     return () => { cancelled = true; };
   }, [pickupCoord, dropCoord]);

@@ -232,7 +232,7 @@ export default function BookingWizardScreen({ navigation, route }) {
 
     (async () => {
       const route = await getRouteInfo(pickupCoord, dropCoord);
-      if (!active) return;
+      if (!active || !route) return;
       setRealDist(route.distance);
       setRealDuration(route.duration);
       setRouteCoords(route.coords);

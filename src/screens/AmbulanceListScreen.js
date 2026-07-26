@@ -6,11 +6,7 @@ import {
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 import { AMBULANCE_TYPES, AMB_RATES } from "../utils/ambulanceCatalog";
-import {
-  getRouteInfo,
-  haversineDistanceKm,
-  estimateRouteDurationSeconds,
-} from "../utils/routeUtils";
+import { getRouteInfo } from "../utils/routeUtils";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -151,6 +147,11 @@ export default function AmbulanceListScreen({ navigation, route }) {
   const [dist, setDist]         = useState(null);
   const [duration, setDuration] = useState(null);
   const [routeLoading, setRouteLoading] = useState(true);
+  // MONEY RULE: true only when the real Directions call failed outright —
+  // never a reason to fall back to straight-line distance for a billable
+  // fare. Fares/Confirm are blocked until this clears.
+  const [routeError, setRouteError] = useState(false);
+  const [routeRetryNonce, setRouteRetryNonce] = useState(0);
 
   const [scheduleType, setScheduleType] = useState(initialScheduleType);
   const [scheduleDate, setScheduleDate] = useState(
@@ -180,31 +181,45 @@ export default function AmbulanceListScreen({ navigation, route }) {
       .catch(() => {});
   }, []);
 
-  // Distance/duration via Directions API with a straight-line Haversine fallback.
+  // Distance/duration via Directions API. MONEY RULE: on failure, do NOT
+  // fall back to straight-line (Haversine) distance — clear dist/duration
+  // and surface routeError so fares aren't shown and Confirm is blocked.
   useEffect(() => {
     if (!pickupCoord || !dropCoord) { setRouteLoading(false); return; }
 
     let active = true;
-    const fallbackDist = haversineDistanceKm(pickupCoord, dropCoord);
-    setDist(fallbackDist);
-    setDuration(estimateRouteDurationSeconds(fallbackDist));
     setRouteLoading(true);
+    setRouteError(false);
 
     getRouteInfo(pickupCoord, dropCoord)
       .then(route => {
         if (!active) return;
-        setDist(route.distance);
-        setDuration(route.duration);
+        if (route) {
+          setDist(route.distance);
+          setDuration(route.duration);
+          setRouteError(false);
+        } else {
+          setDist(null);
+          setDuration(null);
+          setRouteError(true);
+        }
       })
       .catch(err => {
         console.warn("[AmbulanceListScreen] route fetch error:", err?.message ?? err);
+        if (active) { setDist(null); setDuration(null); setRouteError(true); }
       })
       .finally(() => {
         if (active) setRouteLoading(false);
       });
 
     return () => { active = false; };
-  }, [pickupCoord, dropCoord]);
+  }, [pickupCoord, dropCoord, routeRetryNonce]);
+
+  // True once a real, verified road distance is available — every fare
+  // display and the Confirm button below gate on this, never on a
+  // placeholder/unverified dist.
+  const distReady = dist != null && !routeError;
+  const fareFor = (typeId) => (distReady ? calcFare(typeId, dist, pricingList) : { available: false });
 
   // Opens the slide-up schedule modal, seeding the draft from whatever was
   // last confirmed (or the next available time slot if nothing was picked yet)
@@ -288,13 +303,14 @@ export default function AmbulanceListScreen({ navigation, route }) {
 
   // Same param shape AmbulanceSelectScreen.handleNext always sent to ConfirmBooking.
   function handleConfirmType() {
+    if (!distReady) return; // defense-in-depth — Next is disabled for this case too
     navigation.navigate("ConfirmBooking", {
       pickupCoord,
       pickupLabel,
       dropCoord,
       dropLabel,
-      dist: dist ?? 5,
-      duration: duration ?? 1200,
+      dist,
+      duration,
       scheduleType,
       scheduleDate: scheduleType === "later" ? scheduleDate.toISOString() : null,
       patientType,
@@ -345,15 +361,22 @@ export default function AmbulanceListScreen({ navigation, route }) {
 
           <View style={styles.routeMid}>
             <View style={styles.routeLine} />
-            <View style={styles.routeDistPill}>
+            <TouchableOpacity
+              style={styles.routeDistPill}
+              onPress={() => routeError && setRouteRetryNonce(n => n + 1)}
+              activeOpacity={routeError ? 0.7 : 1}
+              disabled={!routeError}
+            >
               {routeLoading ? (
                 <ActivityIndicator size="small" color={COLORS.red} />
+              ) : routeError ? (
+                <Text style={styles.routeDistErrorTxt}>Distance unavailable · Retry</Text>
               ) : (
                 <Text style={styles.routeDistTxt}>
-                  {dist?.toFixed(1)} km · ~{Math.round((duration ?? 0) / 60)} min
+                  {dist.toFixed(1)} km · ~{Math.round((duration ?? 0) / 60)} min
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
             <View style={styles.routeLine} />
           </View>
 
@@ -373,6 +396,18 @@ export default function AmbulanceListScreen({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
+      {!routeLoading && routeError && (
+        <View style={styles.routeErrorBanner}>
+          <Text style={styles.routeErrorIco}>⚠️</Text>
+          <Text style={styles.routeErrorTxt}>
+            Couldn't calculate route distance. Fares can't be shown until it's verified.
+          </Text>
+          <TouchableOpacity onPress={() => setRouteRetryNonce(n => n + 1)}>
+            <Text style={styles.routeErrorRetry}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Ambulance type list */}
       <ScrollView
         style={{ flex: 1 }}
@@ -383,7 +418,7 @@ export default function AmbulanceListScreen({ navigation, route }) {
 
         {AMBULANCE_TYPES.filter(amb => amb.id !== "body_mini" && amb.id !== "body_tempo").map(amb => {
           const info          = AMB_RATES[amb.id];
-          const fareResult    = calcFare(amb.id, dist ?? 0, pricingList);
+          const fareResult    = fareFor(amb.id);
           const priceAvailable = fareResult.available;
           const est           = priceAvailable ? fareResult.total : null;
           const isActive      = selectedAmbType === amb.id;
@@ -440,19 +475,21 @@ export default function AmbulanceListScreen({ navigation, route }) {
         <View style={styles.footerLeft}>
           <Text style={styles.footerLabel}>Selected · {AMBULANCE_TYPES.find(a => a.id === selectedAmbType)?.name}</Text>
           {(() => {
-            const selectedFare = calcFare(selectedAmbType, dist ?? 0, pricingList);
+            const selectedFare = fareFor(selectedAmbType);
             return selectedFare.available ? (
               <Text style={styles.footerPrice}>₹{selectedFare.total.toLocaleString()} est.</Text>
             ) : (
-              <Text style={styles.footerPriceUnavailable}>Pricing unavailable</Text>
+              <Text style={styles.footerPriceUnavailable}>
+                {routeError ? "Distance unavailable" : "Pricing unavailable"}
+              </Text>
             );
           })()}
         </View>
         <TouchableOpacity
-          style={[styles.nextBtn, !calcFare(selectedAmbType, dist ?? 0, pricingList).available && styles.nextBtnDisabled]}
+          style={[styles.nextBtn, !fareFor(selectedAmbType).available && styles.nextBtnDisabled]}
           onPress={handleConfirmType}
           activeOpacity={0.85}
-          disabled={!calcFare(selectedAmbType, dist ?? 0, pricingList).available}
+          disabled={!fareFor(selectedAmbType).available}
         >
           <Text style={styles.nextBtnTxt}>Confirm Type  →</Text>
         </TouchableOpacity>
@@ -600,6 +637,16 @@ const styles = StyleSheet.create({
     minWidth: 90, alignItems: "center",
   },
   routeDistTxt: { color: COLORS.grayDim, fontSize: 11, fontWeight: "600" },
+  routeDistErrorTxt: { color: COLORS.red, fontSize: 10, fontWeight: "700" },
+  routeErrorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginHorizontal: 18, marginBottom: 10, padding: 10,
+    backgroundColor: "rgba(232,25,44,0.08)", borderRadius: 12,
+    borderWidth: 0.5, borderColor: "rgba(232,25,44,0.3)",
+  },
+  routeErrorIco: { fontSize: 14 },
+  routeErrorTxt: { flex: 1, color: COLORS.red, fontSize: 11.5, lineHeight: 15 },
+  routeErrorRetry: { color: COLORS.red, fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
   schedBadge: {
     backgroundColor: "rgba(232,25,44,0.12)",
     borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,

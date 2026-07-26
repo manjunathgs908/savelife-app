@@ -54,19 +54,17 @@ async function fetchWithTimeout(url, timeoutMs = ROUTE_TIMEOUT_MS) {
   }
 }
 
+// MONEY RULE: never return a straight-line (Haversine) distance as a
+// stand-in for a real driving distance — it's always shorter than the
+// real road distance and would undercharge the fare. On any failure
+// (network error, timeout, no route found) this returns null; callers
+// must treat that as "distance not verified," not silently substitute
+// an estimate.
 export async function getRouteInfo(from, to) {
   const cacheKey = routeCacheKey(from, to);
   if (routeCache.has(cacheKey)) {
     return routeCache.get(cacheKey);
   }
-
-  const fallbackDist = haversineDistanceKm(from, to);
-  const fallback = {
-    distance: fallbackDist,
-    duration: estimateRouteDurationSeconds(fallbackDist),
-    coords: [from, to],
-    source: "fallback",
-  };
 
   try {
     const url =
@@ -77,7 +75,7 @@ export async function getRouteInfo(from, to) {
     const response = await fetchWithTimeout(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (!data.routes?.length) return fallback;
+    if (!data.routes?.length) return null;
 
     const leg = data.routes[0].legs[0];
     const points = data.routes[0].overview_polyline?.points;
@@ -91,6 +89,6 @@ export async function getRouteInfo(from, to) {
     routeCache.set(cacheKey, result);
     return result;
   } catch {
-    return fallback;
+    return null;
   }
 }
