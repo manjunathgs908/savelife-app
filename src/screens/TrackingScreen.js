@@ -136,6 +136,8 @@ export default function TrackingScreen({ navigation, route }) {
   // polls. The rupee figure is never derived from that tick: it's always
   // whatever waitState.accruedAmount the server last sent, same as what
   // the driver app shows. Server is the source of truth for money.
+  const [callingDriver, setCallingDriver] = useState(false);
+
   const waitState = trip?.waitState;
   const [, forceWaitTick] = useState(0);
   useEffect(() => {
@@ -158,8 +160,29 @@ export default function TrackingScreen({ navigation, route }) {
     }
   }
 
-  function callDriver() {
-    if (trip?.driver?.phone) Linking.openURL(`tel:${trip.driver.phone}`);
+  // Masked calling via Exotel — the backend no longer returns the driver's
+  // raw phone number (see tripController.js:trackTrip), so this places a
+  // masked call through POST /api/call/connect instead of a tel: link.
+  async function callDriver() {
+    if (!tripId || callingDriver) return;
+    setCallingDriver(true);
+    try {
+      const res = await fetch("https://api.savelife.health/api/call/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tripId, initiator: "customer" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        Alert.alert("Couldn't Connect Call", data.message || "Something went wrong. Please try again.");
+        return;
+      }
+      Alert.alert("Calling Driver", "Your phone will ring shortly — answer it to be connected to the driver.");
+    } catch (err) {
+      Alert.alert("Couldn't Connect Call", "Network error — please check your connection and try again.");
+    } finally {
+      setCallingDriver(false);
+    }
   }
 
   function openCancelModal() {
@@ -453,10 +476,20 @@ export default function TrackingScreen({ navigation, route }) {
           )}
 
           <View style={styles.rowButtons}>
-            {trip?.driver?.phone && (
-              <TouchableOpacity style={[styles.outlineActionBtn, { flex: 1 }]} onPress={callDriver}>
-                <Text style={{ fontSize: 15 }}>📞</Text>
-                <Text style={styles.outlineActionBtnTxt}>Call Driver</Text>
+            {trip?.driver && (
+              <TouchableOpacity
+                style={[styles.outlineActionBtn, { flex: 1 }, callingDriver && { opacity: 0.6 }]}
+                onPress={callDriver}
+                disabled={callingDriver}
+              >
+                {callingDriver ? (
+                  <ActivityIndicator size="small" color={COLORS.teal} />
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 15 }}>📞</Text>
+                    <Text style={styles.outlineActionBtnTxt}>Call Driver</Text>
+                  </>
+                )}
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.outlineActionBtn, { flex: 1 }]} onPress={messageDriver}>
