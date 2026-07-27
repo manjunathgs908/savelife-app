@@ -45,6 +45,9 @@ export default function OtpScreen({ navigation, route }) {
           disabled={!valid}
           onPress={async () => {
             await storage.setItem("userToken", "loggedIn");
+            // Persisted so ConfirmBookingScreen can send it as patientPhone —
+            // same key FreezerBoxBookingScreen.js already reads.
+            await storage.setItem("user_phone", phone);
             navigation.replace("Main");
           }}
         >

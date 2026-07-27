@@ -5,6 +5,7 @@ import {
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
 import { getRouteInfo } from "../utils/routeUtils";
+import storage from "../utils/storage";
 
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
 
@@ -202,6 +203,15 @@ export default function ConfirmBookingScreen({ navigation, route }) {
     }
     if (!fareAvailable) return; // safety net — button is disabled for this case too
     try {
+      // Best-effort — if this is missing (e.g. an old session from before
+      // OtpScreen started persisting it), still let the booking go through.
+      // The backend already gives a clear error on the call-masking
+      // endpoint if a trip ends up with no usable patientPhone.
+      let patientPhone = null;
+      try {
+        patientPhone = await storage.getItem("user_phone");
+      } catch {}
+
       const response = await fetch("https://api.savelife.health/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,6 +231,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           tripType,
           returnAddress: tripType === "round_trip" ? returnAddress : null,
           acEnabled,
+          patientPhone,
         }),
       });
 
