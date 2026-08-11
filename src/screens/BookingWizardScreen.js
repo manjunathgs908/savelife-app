@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import { COLORS, getBookingConfig } from "../theme";
 import {
   getRouteInfo,
@@ -195,8 +196,8 @@ export default function BookingWizardScreen({ navigation, route }) {
   // Get GPS on mount, reverse-geocode to real address
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { setLocLoading(false); return; }
+      const granted = await ensureLocationPermission();
+      if (!granted) { setLocLoading(false); return; }
       try {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };

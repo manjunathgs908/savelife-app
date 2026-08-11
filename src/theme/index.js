@@ -2,6 +2,7 @@
 export const COLORS = {
   red: "#e8192c",
   redDark: "#a01020",
+  brand: "#1677E8",
   bg: "#FFFFFF",
   bg2: "#F8F9FA",
   bg3: "#F0F1F3",

@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Updates from "expo-updates";
 import { COLORS } from "./src/theme";
+import { LocationDisclosureHost } from "./src/utils/locationPermission";
 
 import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -104,6 +105,9 @@ export default function App() {
             <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
           </Stack.Navigator>
         </NavigationContainer>
+        {/* Mounted once, above the navigator — every screen's
+            ensureLocationPermission() call drives this one modal. */}
+        <LocationDisclosureHost />
       </AppContext.Provider>
     </SafeAreaProvider>
   );

@@ -4,6 +4,7 @@ import {
   StyleSheet, Platform, ActivityIndicator, Modal,
 } from "react-native";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
@@ -185,8 +186,8 @@ export default function LocationSearchScreen({ navigation, route }) {
     }
 
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
+      const granted = await ensureLocationPermission();
+      if (!granted) {
         if (!seedCoord) setGpsLabel("Location permission denied");
         setGpsLoading(false);
         return;

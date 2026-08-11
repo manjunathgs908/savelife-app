@@ -4,6 +4,7 @@ import {
   StyleSheet, Platform, ActivityIndicator, Modal, Animated, Alert,
 } from "react-native";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import * as Contacts from "expo-contacts";
 import { COLORS } from "../theme";
 import storage from "../utils/storage";
@@ -186,8 +187,8 @@ function PickupEditSheet({ visible, anchorCoord, onClose, onSelect }) {
   async function resolveGPS() {
     setGpsLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") { setGpsLabel("Location permission denied"); setGpsLoading(false); return; }
+      const granted = await ensureLocationPermission();
+      if (!granted) { setGpsLabel("Location permission denied"); setGpsLoading(false); return; }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       setGpsCoord(coord);
@@ -519,8 +520,8 @@ export default function DestinationScreen({ navigation, route }) {
 
     (async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") { setPickupLabel("Location permission denied"); setGpsLoading(false); return; }
+        const granted = await ensureLocationPermission();
+        if (!granted) { setPickupLabel("Location permission denied"); setGpsLoading(false); return; }
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setPickupCoord(coord);

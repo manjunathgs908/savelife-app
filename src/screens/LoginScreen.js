@@ -1,10 +1,16 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../theme";
+import { LEGAL, openLegal } from "../utils/legal";
 
 export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
+  // Starts unticked, always. Never pre-tick a consent box — consent has to be
+  // an affirmative action by the user, not a default.
+  const [consent, setConsent] = useState(false);
   const valid = phone.length === 10;
+  const canContinue = valid && consent;
 
   return (
     <View style={styles.container}>
@@ -30,15 +36,42 @@ export default function LoginScreen({ navigation }) {
           />
         </View>
 
+        {/* Consent gate. Only the box toggles — the paragraph carries the two
+            legal links, so a stray tap on the text must not grant consent. */}
+        <View style={styles.consentRow}>
+          <TouchableOpacity
+            onPress={() => setConsent((c) => !c)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: consent }}
+            accessibilityLabel="I agree to the terms and consent to data collection"
+            style={[styles.checkbox, consent && styles.checkboxOn]}
+          >
+            {consent && <Ionicons name="checkmark" size={15} color={COLORS.white} />}
+          </TouchableOpacity>
+
+          <Text style={styles.consentText}>
+            By continuing, I confirm I am 18 or older and I agree to SaveLife's{" "}
+            <Text style={styles.link} onPress={() => openLegal(LEGAL.terms)}>
+              Terms of Service
+            </Text>{" "}
+            and{" "}
+            <Text style={styles.link} onPress={() => openLegal(LEGAL.privacy)}>
+              Privacy Policy
+            </Text>
+            . I consent to SaveLife collecting my phone number, name, location and
+            trip details to provide ambulance services. I can withdraw consent or
+            delete my account anytime from my Profile.
+          </Text>
+        </View>
+
         <TouchableOpacity
-          style={[styles.btn, { opacity: valid ? 1 : 0.4 }]}
-          disabled={!valid}
+          style={[styles.btn, { opacity: canContinue ? 1 : 0.4 }]}
+          disabled={!canContinue}
           onPress={() => navigation.navigate("Otp", { phone })}
         >
           <Text style={styles.btnText}>Get OTP</Text>
         </TouchableOpacity>
-
-        <Text style={styles.terms}>By continuing you agree to our Terms & Privacy Policy</Text>
       </View>
     </View>
   );
@@ -57,5 +90,14 @@ const styles = StyleSheet.create({
   input: { flex: 1, backgroundColor: COLORS.bg3, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 16, color: COLORS.text, fontSize: 16 },
   btn: { backgroundColor: COLORS.red, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
   btnText: { color: COLORS.white, fontSize: 16, fontWeight: "700" },
-  terms: { color: COLORS.grayDim, fontSize: 11, textAlign: "center", marginTop: 20, lineHeight: 16 },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 20 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 1.5, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxOn: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  consentText: { flex: 1, color: COLORS.gray, fontSize: 11.5, lineHeight: 17 },
+  link: { color: COLORS.brand, fontWeight: "700" },
 });

@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Modal, Animated, Alert,
 } from "react-native";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
@@ -210,8 +211,8 @@ export default function DeadBodyTransportScreen({ navigation, route }) {
   async function goToCurrentLocation() {
     setLocatingGps(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      const granted = await ensureLocationPermission();
+      if (!granted) return;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       const { address } = await reverseGeocode(coord.latitude, coord.longitude);

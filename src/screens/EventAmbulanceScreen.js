@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import { COLORS } from "../theme";
 
 const MAPS_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
@@ -273,8 +274,8 @@ export default function EventAmbulanceScreen({ navigation }) {
   // option in the search modal and the fixed center pin's starting position.
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      const granted = await ensureLocationPermission();
+      if (!granted) return;
       try {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
@@ -323,8 +324,8 @@ export default function EventAmbulanceScreen({ navigation }) {
   async function goToCurrentLocation() {
     setLocatingGps(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      const granted = await ensureLocationPermission();
+      if (!granted) return;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
       setStandbyCoord(coord);

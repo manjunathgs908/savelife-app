@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import { COLORS } from "../theme";
 
 // Unrestricted key — for HTTP API calls (Places, Geocoding)
@@ -207,8 +208,8 @@ export default function FreezerBoxScreen({ navigation }) {
   async function goToCurrentLocation() {
     setLocatingGps(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      const granted = await ensureLocationPermission();
+      if (!granted) return;
       try {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };

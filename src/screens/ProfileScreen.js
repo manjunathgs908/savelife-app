@@ -2,6 +2,7 @@ import React, { useContext } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { COLORS, LANGUAGES } from "../theme";
 import { AppContext } from "../../App";
+import { LEGAL, EMERGENCY_DISCLAIMER, openLegal } from "../utils/legal";
 
 const ADDRESSES = [
   { id: 1, label: "Home", icon: "🏠", addr: "12, 4th Cross, Indiranagar, Bangalore" },
@@ -13,13 +14,15 @@ export default function ProfileScreen() {
   const { lang, setLang } = useContext(AppContext);
   const nextLang = () => setLang(LANGUAGES[(LANGUAGES.indexOf(lang) + 1) % LANGUAGES.length]);
 
+  // [icon, label, onPress?] — rows without a handler are still inert placeholders.
   const settings = [
     ["🩺", "Medical Information"],
     ["💳", "Payment Methods"],
     ["🛡️", "Insurance"],
-    ["🌐", `Language (${lang})`],
+    ["🌐", `Language (${lang})`, nextLang],
     ["⭐", "Rate & Feedback"],
     ["📞", "Help & Support"],
+    ["🗑️", "Delete account", () => openLegal(LEGAL.accountDeletion)],
   ];
 
   return (
@@ -44,8 +47,8 @@ export default function ProfileScreen() {
         ))}
 
         <Text style={styles.label}>SETTINGS</Text>
-        {settings.map(([ic, l]) => (
-          <TouchableOpacity key={l} style={styles.row} onPress={() => l.includes("Language") && nextLang()}>
+        {settings.map(([ic, l, onPress]) => (
+          <TouchableOpacity key={l} style={styles.row} onPress={onPress}>
             <Text style={{ fontSize: 18 }}>{ic}</Text>
             <Text style={styles.rowText}>{l}</Text>
             <Text style={styles.arrow}>›</Text>
@@ -58,6 +61,8 @@ export default function ProfileScreen() {
             <Text style={{ color: COLORS.text }}>Life</Text> 🚑
           </Text>
           <Text style={styles.brandSub}>Powered by MediFleet • v1.0</Text>
+          {/* Standing emergency disclaimer — not dismissible. */}
+          <Text style={styles.disclaimer}>{EMERGENCY_DISCLAIMER}</Text>
         </View>
       </ScrollView>
     </View>
@@ -83,4 +88,8 @@ const styles = StyleSheet.create({
   brandFooter: { alignItems: "center", paddingVertical: 28 },
   brandText: { fontSize: 22, fontWeight: "800" },
   brandSub: { fontSize: 11, color: COLORS.grayDim, marginTop: 4 },
+  disclaimer: {
+    color: COLORS.grayDim, fontSize: 11, lineHeight: 16,
+    textAlign: "center", marginTop: 14, paddingHorizontal: 10,
+  },
 });

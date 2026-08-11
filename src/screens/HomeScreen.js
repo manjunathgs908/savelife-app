@@ -5,8 +5,10 @@ import {
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import { COLORS } from "../theme";
 import { AppContext } from "../../App";
+import { EMERGENCY_DISCLAIMER } from "../utils/legal";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PLACES_KEY = "AIzaSyB8wxgXxQxskgUZG868g_4Qdsezr07i9yA";
@@ -216,8 +218,8 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
+      const granted = await ensureLocationPermission();
+      if (!granted) {
         setUserLabel("Bangalore, Karnataka");
         setLocLoading(false);
         return;
@@ -426,6 +428,9 @@ export default function HomeScreen({ navigation }) {
 
           <PromoBanner />
 
+          {/* Standing emergency disclaimer — not dismissible, no close affordance. */}
+          <Text style={styles.disclaimer}>{EMERGENCY_DISCLAIMER}</Text>
+
         </View>
       </ScrollView>
 
@@ -624,6 +629,10 @@ const styles = StyleSheet.create({
 
   // ══ SERVICES SECTION ════════════════════════════════════════════════════════
   svcSection: { paddingHorizontal: SIDE_PAD },
+  disclaimer: {
+    color: COLORS.grayDim, fontSize: 11, lineHeight: 16,
+    textAlign: "center", marginTop: 18, marginBottom: 6,
+  },
   svcHeader: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     marginBottom: 12,

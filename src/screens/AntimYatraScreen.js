@@ -4,6 +4,7 @@ import {
   StyleSheet, Switch, Alert, ActivityIndicator, Modal, Animated,
 } from "react-native";
 import * as Location from "expo-location";
+import { ensureLocationPermission } from "../utils/locationPermission";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 import { getRouteInfo } from "../utils/routeUtils";
@@ -272,8 +273,8 @@ export default function AntimYatraScreen({ navigation }) {
     (async () => {
       setLocatingGps(true);
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") return;
+        const granted = await ensureLocationPermission();
+        if (!granted) return;
         let loc;
         try {
           loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -378,8 +379,8 @@ export default function AntimYatraScreen({ navigation }) {
   async function useCurrentLocationForPickup() {
     setLocatingGps(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
+      const granted = await ensureLocationPermission();
+      if (!granted) {
         Alert.alert("Permission needed", "Enable location access to auto-fill the pickup address.");
         return;
       }
