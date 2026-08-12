@@ -71,6 +71,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppContext.Provider value={{ lang, setLang }}>
+        {/* Mounted BEFORE the navigator, deliberately. Sibling effects run in
+            render order, so this one's useEffect assigns openDisclosure before
+            any screen effect can call ensureLocationPermission() — otherwise a
+            screen that requests location on mount would find openDisclosure
+            still null and fail closed (no disclosure, no prompt, no GPS).
+            Stacking is unaffected: <Modal> renders in its own native window,
+            not inline, so it still appears above the navigator. */}
+        <LocationDisclosureHost />
         <NavigationContainer>
           <StatusBar style="dark" />
           <Stack.Navigator
@@ -105,9 +113,6 @@ export default function App() {
             <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
           </Stack.Navigator>
         </NavigationContainer>
-        {/* Mounted once, above the navigator — every screen's
-            ensureLocationPermission() call drives this one modal. */}
-        <LocationDisclosureHost />
       </AppContext.Provider>
     </SafeAreaProvider>
   );
