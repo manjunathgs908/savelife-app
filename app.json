@@ -21,6 +21,7 @@
     },
     "android": {
       "package": "health.savelife.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1677E8"

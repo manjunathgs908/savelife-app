@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../theme";
 import { LEGAL, openLegal } from "../utils/legal";
+import storage from "../utils/storage";
 
 export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
@@ -19,7 +20,11 @@ export default function LoginScreen({ navigation }) {
         <Text style={{ color: COLORS.text }}>Life</Text>
       </Text>
       <View style={styles.center}>
-        <Text style={styles.icon}>🚑</Text>
+        <Image
+          source={require("../../assets/icon.png")}
+          style={styles.icon}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Welcome</Text>
         <Text style={styles.sub}>Enter your phone number to book an ambulance instantly</Text>
 
@@ -68,7 +73,20 @@ export default function LoginScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.btn, { opacity: canContinue ? 1 : 0.4 }]}
           disabled={!canContinue}
-          onPress={() => navigation.navigate("Otp", { phone })}
+          onPress={async () => {
+            // Recorded here, at the affirmative tap, because this button is
+            // only reachable with the box ticked (canContinue). SplashScreen
+            // reads this key back — without it, a session alone never gets
+            // past Login again.
+            try {
+              await storage.setItem("consentAcceptedAt", new Date().toISOString());
+            } catch {
+              // Never block the emergency path on a storage write. The cost is
+              // that the gate shows again next launch, which is the safe way
+              // to fail.
+            }
+            navigation.navigate("Otp", { phone });
+          }}
         >
           <Text style={styles.btnText}>Get OTP</Text>
         </TouchableOpacity>
@@ -81,7 +99,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg, padding: 28, paddingTop: 70 },
   logo: { fontSize: 22, fontWeight: "800" },
   center: { flex: 1, justifyContent: "center" },
-  icon: { fontSize: 52, marginBottom: 20 },
+  icon: { width: 64, height: 64, marginBottom: 20 },
   title: { color: COLORS.text, fontSize: 30, fontWeight: "800", marginBottom: 8 },
   sub: { color: COLORS.gray, fontSize: 14, lineHeight: 22, marginBottom: 32 },
   phoneRow: { flexDirection: "row", gap: 10, marginBottom: 20 },

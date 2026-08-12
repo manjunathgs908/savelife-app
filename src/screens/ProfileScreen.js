@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-nati
 import { COLORS, LANGUAGES } from "../theme";
 import { AppContext } from "../../App";
 import { LEGAL, EMERGENCY_DISCLAIMER, openLegal } from "../utils/legal";
+import storage from "../utils/storage";
 
 const ADDRESSES = [
   { id: 1, label: "Home", icon: "🏠", addr: "12, 4th Cross, Indiranagar, Bangalore" },
@@ -10,9 +11,25 @@ const ADDRESSES = [
   { id: 3, label: "Mom's House", icon: "❤️", addr: "45, Jayanagar 7th Block, Bangalore" },
 ];
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { lang, setLang } = useContext(AppContext);
   const nextLang = () => setLang(LANGUAGES[(LANGUAGES.indexOf(lang) + 1) % LANGUAGES.length]);
+
+  // Clears the consent record alongside the session, so the next sign-in goes
+  // through the gate again rather than inheriting the previous user's consent.
+  const logout = async () => {
+    try {
+      await storage.removeItem("userToken");
+      await storage.removeItem("consentAcceptedAt");
+    } catch {
+      // Still leave for Login even if the clear failed — SplashScreen's own
+      // check is what actually gates entry on the next launch.
+    }
+    // Login lives on the root stack, not this tab navigator. Reset there so
+    // Back cannot return to a signed-out Home.
+    const root = navigation.getParent() ?? navigation;
+    root.reset({ index: 0, routes: [{ name: "Login" }] });
+  };
 
   // [icon, label, onPress?] — rows without a handler are still inert placeholders.
   const settings = [
@@ -22,6 +39,7 @@ export default function ProfileScreen() {
     ["🌐", `Language (${lang})`, nextLang],
     ["⭐", "Rate & Feedback"],
     ["📞", "Help & Support"],
+    ["🚪", "Log out", logout],
     ["🗑️", "Delete account", () => openLegal(LEGAL.accountDeletion)],
   ];
 

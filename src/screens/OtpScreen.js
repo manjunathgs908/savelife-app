@@ -44,6 +44,13 @@ export default function OtpScreen({ navigation, route }) {
           style={[styles.btn, { opacity: valid ? 1 : 0.4 }]}
           disabled={!valid}
           onPress={async () => {
+            // TODO: this is not authentication. The OTP is never checked —
+            // `valid` above only requires four non-empty boxes, so any four
+            // digits reach this line — and "loggedIn" is a marker string, not
+            // a credential: no signature, no expiry, never verified against
+            // the server. Replace with a real verify call that returns a JWT,
+            // store that, and have SplashScreen validate it before routing to
+            // Main. Until then every session check in the app is cosmetic.
             await storage.setItem("userToken", "loggedIn");
             // Persisted so ConfirmBookingScreen can send it as patientPhone —
             // same key FreezerBoxBookingScreen.js already reads.
