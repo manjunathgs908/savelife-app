@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
+import { isOneWayOnly } from "../utils/ambulanceCatalog";
 import { getRouteInfo } from "../utils/routeUtils";
 import storage from "../utils/storage";
 
@@ -48,6 +49,15 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   // Trip Type — chosen right here, this is the only place it's set
   const [tripType, setTripType] = useState("one_way"); // "one_way" | "round_trip"
+
+  // Body shifting is one-way by nature, so Round Trip is withheld for it.
+  // The effect is the safety net: tripType must never stay round_trip for a
+  // service the UI no longer offers it for, or effectiveDist below would
+  // bill a doubled distance. Mirrors savelife-web/app/book/BookForm.js.
+  const oneWayOnly = isOneWayOnly(selectedType);
+  useEffect(() => {
+    if (oneWayOnly) setTripType("one_way");
+  }, [oneWayOnly]);
   const [returnAddress, setReturnAddress] = useState("");
   const [returnCoord, setReturnCoord] = useState(pickupCoord || null);
   const [returnSameAsPickup, setReturnSameAsPickup] = useState(true);
@@ -351,6 +361,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             <Text style={styles.tripOptText}>➡️ One Way</Text>
           </TouchableOpacity>
 
+          {!oneWayOnly && (
           <TouchableOpacity
             style={styles.tripOpt}
             onPress={() => setTripType("round_trip")}
@@ -361,6 +372,11 @@ export default function ConfirmBookingScreen({ navigation, route }) {
             </View>
             <Text style={styles.tripOptText}>🔄 Round Trip (Up & Down)</Text>
           </TouchableOpacity>
+          )}
+
+          {oneWayOnly && (
+            <Text style={styles.oneWayNote}>Body shifting is a one-way service.</Text>
+          )}
 
           {tripType === "round_trip" && (
             <View style={styles.returnSection}>
@@ -628,6 +644,7 @@ const styles = StyleSheet.create({
   // Trip Type selector
   tripOpt: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 },
   tripOptText: { color: COLORS.text, fontSize: 14, fontWeight: "500" },
+  oneWayNote: { color: COLORS.grayDim, fontSize: 12, marginTop: 4, marginLeft: 34 },
   radio: {
     width: 22, height: 22, borderRadius: 11,
     borderWidth: 2, borderColor: "rgba(0,0,0,0.3)",

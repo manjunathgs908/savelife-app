@@ -13,6 +13,15 @@ export const AMBULANCE_TYPES = [
   { id: "body_mini",  icon: "🚑",  name: "Body Shifting Mini Ambulance", desc: "Dead Body Transport • Maruti Eeco" },
 ];
 
+// Services that are one-way by nature. Last-rites transport does not bring
+// the deceased back, so a round trip is not a bookable shape for it - the UI
+// withholds the option instead of offering it and rejecting it later.
+// Ids match AMBULANCE_TYPES above. Mirrored on the website at
+// savelife-web/lib/config.js - keep the two in sync.
+export const ONE_WAY_ONLY_TYPES = ["body_tempo", "body_mini"];
+
+export const isOneWayOnly = (id) => ONE_WAY_ONLY_TYPES.includes(id);
+
 export const AMB_RATES = {
   bls:        { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
   bls_tempo:  {                             eta: "10", badge: "BLS",            color: "#22c55e" },
