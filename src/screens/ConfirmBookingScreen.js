@@ -4,7 +4,7 @@ import {
 } from "react-native";
 import { COLORS } from "../theme";
 import { calcFare, PRICING_API } from "../utils/pricingUtils";
-import { isOneWayOnly } from "../utils/ambulanceCatalog";
+import { isOneWayOnly, isHelperEligible } from "../utils/ambulanceCatalog";
 import { getRouteInfo } from "../utils/routeUtils";
 import storage from "../utils/storage";
 
@@ -46,6 +46,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
 
   const [pricingList, setPricingList] = useState(passedPricing || []);
   const [acEnabled, setAcEnabled] = useState(false);
+  const [helperEnabled, setHelperEnabled] = useState(false);
 
   // Trip Type — chosen right here, this is the only place it's set
   const [tripType, setTripType] = useState("one_way"); // "one_way" | "round_trip"
@@ -204,7 +205,19 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   const acPrice = acAvailable ? Math.round(pricingDoc.acPerKm * effectiveDist) : null;
   const effectiveAcEnabled = acEnabled && acAvailable;
 
-  const total = fareAvailable ? baseFareTotal + (effectiveAcEnabled ? acPrice : 0) : null;
+  // Helper add-on: a flat per-trip fee from the Pricing doc, not a per-km
+  // rate like AC above. Offered only for BLS services on short local trips,
+  // and the distance test is on `dist` - the ONE-WAY leg - not effectiveDist.
+  const helperPrice = distVerified && pricingDoc?.helperCharge ? pricingDoc.helperCharge : null;
+  const helperAvailable = helperPrice != null && isHelperEligible(selectedType, dist);
+  const effectiveHelperEnabled = helperEnabled && helperAvailable;
+  // Never leave a helper ticked - and billed - for a service or distance
+  // that no longer allows it, if the trip is edited upstream.
+  useEffect(() => {
+    if (!helperAvailable) setHelperEnabled(false);
+  }, [helperAvailable]);
+
+  const total = fareAvailable ? baseFareTotal + (effectiveAcEnabled ? acPrice : 0) + (effectiveHelperEnabled ? helperPrice : 0) : null;
 
   async function handleConfirm() {
     if (!distVerified) {
@@ -241,6 +254,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
           tripType,
           returnAddress: tripType === "round_trip" ? returnAddress : null,
           acEnabled,
+          helperEnabled,
           patientPhone,
         }),
       });
@@ -488,6 +502,25 @@ export default function ConfirmBookingScreen({ navigation, route }) {
               {effectiveAcEnabled && <Text style={styles.checkmark}>✓</Text>}
             </View>
           </TouchableOpacity>
+
+          {/* Helper - BLS only, one-way leg <= 50 km. Hidden rather than
+              disabled, since an ineligible trip has no helper to offer. */}
+          {helperAvailable && (
+            <TouchableOpacity
+              style={[styles.addonRow, effectiveHelperEnabled && styles.addonRowActive]}
+              onPress={() => setHelperEnabled(v => !v)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addonIco}>🙋</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addonName}>Helper</Text>
+                <Text style={styles.addonPrice}>+₹{helperPrice.toLocaleString()}</Text>
+              </View>
+              <View style={[styles.checkbox, effectiveHelperEnabled && styles.checkboxActive]}>
+                {effectiveHelperEnabled && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+            </TouchableOpacity>
+          )}
 
         </View>
 

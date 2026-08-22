@@ -22,6 +22,22 @@ export const ONE_WAY_ONLY_TYPES = ["body_tempo", "body_mini"];
 
 export const isOneWayOnly = (id) => ONE_WAY_ONLY_TYPES.includes(id);
 
+// Helper/attendant add-on eligibility. Two independent UI rules: only the
+// BLS services carry a helper, and only for local trips - an intercity run
+// is not a job a single attendant is booked for. The distance test is on
+// the ONE-WAY leg, never the round-trip doubled figure, so a 40 km round
+// trip still qualifies at 80 km billed.
+// Mirrored on the website at savelife-web/lib/config.js - keep in sync.
+// The fee itself is deliberately NOT here - it comes from the Pricing doc's
+// helperCharge, so it stays editable in the DB like every other rupee value.
+export const HELPER_ELIGIBLE_TYPES = ["bls", "bls_tempo"];
+export const HELPER_MAX_ONE_WAY_KM = 50;
+
+export const isHelperEligible = (id, oneWayKm) =>
+  HELPER_ELIGIBLE_TYPES.includes(id) &&
+  oneWayKm > 0 &&
+  oneWayKm <= HELPER_MAX_ONE_WAY_KM;
+
 export const AMB_RATES = {
   bls:        { km: _bls.vehicles[0].rate, base: 0,    eta: "8",  badge: "MOST POPULAR",  color: "#22c55e" },
   bls_tempo:  {                             eta: "10", badge: "BLS",            color: "#22c55e" },
