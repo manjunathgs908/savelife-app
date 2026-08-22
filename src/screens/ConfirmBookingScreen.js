@@ -183,7 +183,7 @@ export default function ConfirmBookingScreen({ navigation, route }) {
   // false and NOTHING is guessed. The fare section renders an unavailable
   // state and Confirm Booking is disabled until a real doc exists.
   const { total: baseFareTotal, available: fareAvailable } = distVerified
-    ? calcFare(selectedType, effectiveDist, pricingList)
+    ? calcFare(selectedType, effectiveDist, pricingList, { tripType, oneWayKm: dist })
     : { total: null, available: false };
 
   // AC price: only offer the add-on if the Pricing doc actually defines

@@ -13,7 +13,15 @@ export const PRICING_API = "https://api.savelife.health/api/pricing";
  * @param {number}   km           trip distance
  * @param {Array}    pricingList  response from GET /api/pricing
  */
-export function calcFare(typeId, km, pricingList) {
+/**
+ * calcFare — app/website mirror of the backend's fareCalculator.compute().
+ *
+ * opts.tripType 'round_trip' plus a roundTripSlabs array on the pricing doc
+ * switches the lookup to that table, keyed on opts.oneWayKm (the single
+ * leg). Without either, behaviour is exactly what it was. No price or
+ * multiplier lives here — the numbers are only ever in MongoDB.
+ */
+export function calcFare(typeId, km, pricingList, opts = {}) {
   const doc = pricingList.find(
     p => p.serviceType?.toLowerCase() === typeId && p.active !== false
   );
@@ -23,7 +31,16 @@ export function calcFare(typeId, km, pricingList) {
   }
 
   // Normalise slab entries: accept [[km,price],...] or [{km,price},...]
-  const pts = doc.slabs.map(s => Array.isArray(s) ? s : [s.km, s.price]);
+  // Dedicated round-trip table, when the service has one.
+  const useRt = opts.tripType === 'round_trip'
+    && Array.isArray(doc.roundTripSlabs) && doc.roundTripSlabs.length >= 2;
+  const table = useRt ? doc.roundTripSlabs : doc.slabs;
+  const after300 = useRt ? doc.roundTripAfter300KmRate : doc.after300KmRate;
+  // roundTripSlabs is keyed on the one-way leg; ordinary slabs on the
+  // distance being billed.
+  if (useRt) km = opts.oneWayKm != null ? opts.oneWayKm : km / 2;
+
+  const pts = table.map(s => Array.isArray(s) ? s : [s.km, s.price]);
 
   if (km <= pts[0][0]) {
     return { distFare: pts[0][1], base: 0, total: pts[0][1], available: true };
