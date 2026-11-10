@@ -267,6 +267,10 @@ export default function ConfirmBookingScreen({ navigation, route }) {
       navigation.navigate("Searching", {
         service: selectedType,
         tripId: result.trip._id,
+        // Lets TrackingScreen authorise the masked "Call Driver" request
+        // (POST /api/trips/:id/call). SearchingScreen forwards route.params
+        // to Tracking unchanged, so this rides along automatically.
+        trackingToken: result.trip.trackingToken || null,
         pickupCoord, pickupLabel, dropCoord, dropLabel,
         dist, duration, fare: total, selectedAmb,
       });
