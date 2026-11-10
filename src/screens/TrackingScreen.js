@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Linking, S
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { COLORS } from "../theme";
 import { getRouteInfo, haversineDistanceKm } from "../utils/routeUtils";
+import storage from "../utils/storage";
 
 // Only refetch the ambulance -> pickup route once the driver has moved
 // this far from where the last route was computed — the driver's GPS
@@ -14,6 +15,10 @@ const ROUTE_REFETCH_KM = 0.3;
 const TRACK_API = "https://api.savelife.health/api/trips";
 const POLL_INTERVAL_MS = 5000;
 const COORD_DELTA = { latitudeDelta: 0.05, longitudeDelta: 0.05 };
+
+// Shown under the masked caller ID after a successful Call Driver request:
+// "You will get a call from this number. Please pick up."
+const CALL_INCOMING_MSG = "ಈ ನಂಬರ್‌ನಿಂದ ನಿಮಗೆ ಕರೆ ಬರುತ್ತದೆ. ದಯವಿಟ್ಟು ಎತ್ತಿ.";
 
 // TEMPORARY — no real support/helpline number exists anywhere in this
 // app today (ProfileScreen's "Help & Support" row has no handler either;
@@ -45,7 +50,7 @@ const CANCEL_REASONS = [
 ];
 
 export default function TrackingScreen({ navigation, route }) {
-  const { tripId, pickupCoord, dropCoord } = route.params || {};
+  const { tripId, trackingToken, pickupCoord, dropCoord } = route.params || {};
 
   const [trip, setTrip] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -160,24 +165,44 @@ export default function TrackingScreen({ navigation, route }) {
     }
   }
 
-  // Masked calling via Exotel — the backend no longer returns the driver's
-  // raw phone number (see tripController.js:trackTrip), so this places a
-  // masked call through POST /api/call/connect instead of a tel: link.
+  // Masked calling — POST /api/trips/:tripId/call. The backend bridges the
+  // call and rings the customer from a masked number (callerIdDisplay).
+  // The driver's real number is never sent to, shown in, or dialled from
+  // this app. Auth: the trip's trackingToken (from the booking response)
+  // and/or the customer's login token as a Bearer header — whichever we
+  // have; phone/call-centre bookings won't have a trackingToken in-app.
   async function callDriver() {
     if (!tripId || callingDriver) return;
     setCallingDriver(true);
     try {
-      const res = await fetch("https://api.savelife.health/api/call/connect", {
+      let userToken = null;
+      try {
+        userToken = await storage.getItem("userToken");
+      } catch {}
+
+      const headers = { "Content-Type": "application/json" };
+      if (userToken) headers.Authorization = `Bearer ${userToken}`;
+      const body = { from: "customer" };
+      if (trackingToken) body.trackingToken = trackingToken;
+
+      const res = await fetch(`${TRACK_API}/${tripId}/call`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId, initiator: "customer" }),
+        headers,
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
+      if (!res.ok || data.success === false) {
+        // Backend words these for the customer (driver not yet confirmed,
+        // trip completed, …) — show as-is.
         Alert.alert("Couldn't Connect Call", data.message || "Something went wrong. Please try again.");
         return;
       }
-      Alert.alert("Calling Driver", "Your phone will ring shortly — answer it to be connected to the driver.");
+      Alert.alert(
+        "Calling Driver",
+        data.callerIdDisplay
+          ? `${data.callerIdDisplay}\n\n${CALL_INCOMING_MSG}`
+          : CALL_INCOMING_MSG,
+      );
     } catch (err) {
       Alert.alert("Couldn't Connect Call", "Network error — please check your connection and try again.");
     } finally {
