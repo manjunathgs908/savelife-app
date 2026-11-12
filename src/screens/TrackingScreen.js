@@ -143,6 +143,26 @@ export default function TrackingScreen({ navigation, route }) {
   // the driver app shows. Server is the source of truth for money.
   const [callingDriver, setCallingDriver] = useState(false);
 
+  // Dial-pad masking: when the backend can bridge this trip it sends a
+  // masked `callNumber` on every /track poll (null when the trip can't be
+  // called, e.g. once it has ended). Read straight off the latest poll, so
+  // the button switches back as soon as the server clears it.
+  const callNumber = trip?.callNumber ? String(trip.callNumber).trim() : null;
+
+  // Last 4 digits of the login number (saved by OtpScreen) for the hint —
+  // the bridge recognises the customer by the number they call from.
+  const [registeredLast4, setRegisteredLast4] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    storage.getItem("user_phone")
+      .then(p => {
+        const digits = String(p || "").replace(/\D/g, "");
+        if (alive && digits.length >= 4) setRegisteredLast4(digits.slice(-4));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const waitState = trip?.waitState;
   const [, forceWaitTick] = useState(0);
   useEffect(() => {
@@ -171,7 +191,21 @@ export default function TrackingScreen({ navigation, route }) {
   // this app. Auth: the trip's trackingToken (from the booking response)
   // and/or the customer's login token as a Bearer header — whichever we
   // have; phone/call-centre bookings won't have a trackingToken in-app.
+  //
+  // When the trip carries a `callNumber` (dial-pad masking), the button
+  // opens the phone's dialler on that masked number instead; the bridge
+  // connects the customer's registered number to the driver. Only the
+  // masked number is ever dialled — never the driver's.
   async function callDriver() {
+    if (callNumber) {
+      const dialable = callNumber.replace(/[^\d+]/g, "");
+      try {
+        await Linking.openURL(`tel:${dialable}`);
+      } catch {
+        Alert.alert("Couldn't Open Dialler", `Please dial ${callNumber} from your registered number to reach your driver.`);
+      }
+      return;
+    }
     if (!tripId || callingDriver) return;
     setCallingDriver(true);
     try {
@@ -522,6 +556,13 @@ export default function TrackingScreen({ navigation, route }) {
               <Text style={styles.outlineActionBtnTxt}>Message Driver</Text>
             </TouchableOpacity>
           </View>
+          {trip?.driver && callNumber && (
+            <Text style={styles.callHint}>
+              {registeredLast4
+                ? `Call from your registered number ••••${registeredLast4}`
+                : "Call from your registered number"}
+            </Text>
+          )}
 
           <View style={styles.sideBySideRow}>
             {trip?.pickupOtp && (
@@ -834,6 +875,7 @@ const styles = StyleSheet.create({
   summaryLabel: { color: COLORS.grayDim, fontSize: 10.5, marginTop: 2 },
 
   rowButtons: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 12 },
+  callHint: { color: COLORS.grayDim, fontSize: 11.5, marginTop: -6, marginBottom: 12, paddingHorizontal: 2 },
   shareBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     paddingVertical: 14, borderRadius: 12, backgroundColor: COLORS.teal,
